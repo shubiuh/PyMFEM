@@ -18,3 +18,11 @@ test/*
 !test/issues/data_3960/VisIt_volume
 *.egg-info
 *.py#
+.venv/**
+external/**
+mfem/**/**.cxx
+mfem/**/**.py
+mfem/**/**.h
+examples/sol.**
+examples/mesh.**
+mfem/common/existing_mfem_headers.i
