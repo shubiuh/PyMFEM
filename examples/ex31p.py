@@ -210,17 +210,16 @@ def run(order=1,
             yComp.ProjectCoefficient(yCoef)
             zComp.ProjectCoefficient(zCoef)
 
-            x_sock << "solution\n" << pmesh << xComp
+            x_sock.send_solution(pmesh, xComp)
+            x_sock.send_text("window_title 'X component'")
             x_sock.flush()
-            x_sock << "window_title 'X component'"
-            x_sock.flush()
-            y_sock << "solution\n" << pmesh << yComp
+            
+            y_sock.send_solution(pmesh, yComp)
+            y_sock.send_text("window_geometry 403 0 400 350\nwindow_title 'Y component'")
             y_sock.flush()
-            y_sock << "window_geometry 403 0 400 350 " << "window_title 'Y component'"
-            y_sock.flush()
-            z_sock << "solution\n" << pmesh << zComp
-            z_sock.flush()
-            z_sock << "window_geometry 806 0 400 350 " << "window_title 'Z component'"
+            
+            z_sock.send_solution(pmesh, zComp)
+            z_sock.send_text("window_geometry 806 0 400 350\nwindow_title 'Z component'")
             z_sock.flush()
 
             dyCoef = mfem.InnerProductCoefficient(yVecCoef, dsolCoef)
@@ -228,15 +227,13 @@ def run(order=1,
             dyComp.ProjectCoefficient(dyCoef)
             dzComp.ProjectCoefficient(dzCoef)
 
-            dy_sock << "solution\n" << pmesh << dyComp
-            dy_sock.flush()
-            dy_sock << "window_geometry 403 375 400 350 " << "window_title 'Y component of Curl'"
+            dy_sock.send_solution(pmesh, dyComp)
+            dy_sock.send_text("window_geometry 403 375 400 350\nwindow_title 'Y component of Curl'")
             dy_sock.flush()
 
-            dy_sock << "solution\n" << pmesh << dzComp
-            dy_sock.flush()
-            dy_sock << "window_geometry 403 375 400 350 " << "window_title 'Z component of Curl'"
-            dy_sock.flush()
+            dz_sock.send_solution(pmesh, dzComp)
+            dz_sock.send_text("window_geometry 806 375 400 350\nwindow_title 'Z component of Curl'")
+            dz_sock.flush()
 
         elif dim == 2:
             xy_sock = make_socketstrema()
@@ -272,12 +269,12 @@ def run(order=1,
             xyComp.ProjectCoefficient(xyCoef)
             zComp.ProjectCoefficient(zCoef)
 
-            xy_sock.precision(8)
-            xy_sock << "solution\n" << pmesh << xyComp
-            xy_sock << "window_title 'XY components'\n"
+            xy_sock.send_solution(pmesh, xyComp)
+            xy_sock.send_text("window_title 'XY components'")
             xy_sock.flush()
-            z_sock << "solution\n" << pmesh << zComp
-            z_sock << "window_geometry 403 0 400 350 " << "window_title 'Z component'"
+            
+            z_sock.send_solution(pmesh, zComp)
+            z_sock.send_text("window_geometry 403 0 400 350\nwindow_title 'Z component'")
             z_sock.flush()
 
             dxyCoef = mfem.MatrixVectorProductCoefficient(xyMatCoef, dsolCoef)
@@ -286,11 +283,12 @@ def run(order=1,
             dxyComp.ProjectCoefficient(dxyCoef)
             dzComp.ProjectCoefficient(dzCoef)
 
-            dxy_sock << "solution\n" << pmesh << dxyComp
-            dxy_sock << "window_geometry 0 375 400 350 " << "window_title 'XY components of Curl'"
+            dxy_sock.send_solution(pmesh, dxyComp)
+            dxy_sock.send_text("window_geometry 0 375 400 350\nwindow_title 'XY components of Curl'")
             dxy_sock.flush()
-            dz_sock << "solution\n" << pmesh << dzComp
-            dz_sock << "window_geometry 403 375 400 350 " << "window_title 'Z component of Curl'"
+            
+            dz_sock.send_solution(pmesh, dzComp)
+            dz_sock.send_text("window_geometry 403 375 400 350\nwindow_title 'Z component of Curl'")
             dz_sock.flush()
 
         else:
@@ -304,20 +302,23 @@ def run(order=1,
 
             dsol.ProjectCoefficient(dsolCoef)
 
-            sol_sock.precision(8)
-            dsol_sock.precision(8)
-            sol_sock << "solution\n" << pmesh << sol << "window_title 'Solution'"
+            sol_sock.send_solution(pmesh, sol)
+            sol_sock.send_text("window_title 'Solution'")
             sol_sock.flush()
-            dsol_sock << "solution\n" << pmesh << dsol
+            
+            dsol_sock.send_solution(pmesh, dsol)
+            dsol_sock.send_text("window_geometry 0 375 400 350\nwindow_title 'Curl of solution'")
             dsol_sock.flush()
-            dsol_sock << "window_geometry 0 375 400 350 " << "window_title 'Curl of solution'"
-            dsol_sock.flush()
+            
+            if myid == 0:
+                print("\nSolution sent to GLVis")
 
 
 def make_socketstrema():
     sock = mfem.socketstream("localhost", 19916)
-    sock.precision(8)
-    sock << "parallel " << num_procs << " " << myid << "\n"
+    if sock.good():
+        sock.precision(8)
+        sock.send_text("parallel " + str(num_procs) + " " + str(myid))
     return sock
 
 

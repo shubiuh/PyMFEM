@@ -18,7 +18,7 @@ smyid = '.'+'{:0>6d}'.format(myid)
 def run(order_refinements=2,
         geometric_refinements=0,
         mesh_file='',
-        visualization=True,
+        visualization=False,
         device='cpu'):
 
     class DiffusionMultigrid(mfem.PyGeometricMultigrid):
@@ -178,10 +178,16 @@ def run(order_refinements=2,
     # 12. Send the solution by socket to a GLVis server.
     if visualization:
         sol_sock = mfem.socketstream("localhost", 19916)
-        sol_sock << "parallel " << num_procs << " " << myid << "\n"
-        sol_sock.precision(8)
-        sol_sock << "solution\n" << fespaces.GetFinestFESpace().GetMesh() << x
-        sol_sock.flush()
+        if sol_sock.good():
+            sol_sock.send_text("parallel " + str(num_procs) + " " + str(myid))
+            sol_sock.precision(8)
+            sol_sock.send_solution(fespaces.GetFinestFESpace().GetMesh(), x)
+            sol_sock.flush()
+            if myid == 0:
+                print("\nSolution sent to GLVis")
+        else:
+            if myid == 0:
+                print("Unable to connect to GLVis server")
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ external/**
 mfem/**/**.cxx
 mfem/**/**.py
 mfem/**/**.h
-examples/sol.**
-examples/mesh.**
+examples/sol*.**
+examples/mesh*.**
+examples/**.mesh
 mfem/common/existing_mfem_headers.i

@@ -29,7 +29,7 @@ myid = MPI.COMM_WORLD.rank
 smyid = '{:0>6d}'.format(myid)
 
 
-def run(order=1, meshfile=''):
+def run(order=1, meshfile='', visualization=False):
     '''
     run ex0
     '''
@@ -87,10 +87,17 @@ def run(order=1, meshfile=''):
     cg.Mult(B, X)
 
     # 10. Recover the solution x as a grid function and save to file. The output
-    #     can be viewed using GLVis as follows: "glvis -m mesh.mesh -g sol.gf"
+    #     can be viewed using GLVis as follows: "glvis -np <np> -m mesh -g sol"
     a.RecoverFEMSolution(X, b, x)
     x.Save('sol.'+smyid)
     mesh.Print('mesh.'+smyid)
+
+    # 11. Send the solution by socket to a GLVis server.
+    if visualization:
+        sol_sock = mfem.socketstream("localhost", 19916)
+        sol_sock.send_text("parallel " + str(num_procs) + " " + str(myid))
+        sol_sock.precision(8)
+        sol_sock.send_solution(mesh, x)
 
 
 if __name__ == "__main__":
@@ -104,6 +111,9 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--order',
                         action='store', default=1, type=int,
                         help="Finite element order (polynomial degree) or -1 for isoparametric space.")
+    parser.add_argument('-vis', '--visualization',
+                        action='store_true',
+                        help='Enable GLVis visualization')
 
     args = parser.parse_args()
     parser.print_options(args)
@@ -113,4 +123,5 @@ if __name__ == "__main__":
         join(os.path.dirname(__file__), '..', 'data', args.mesh))
 
     run(order=order,
-        meshfile=meshfile)
+        meshfile=meshfile,
+        visualization=args.visualization)
