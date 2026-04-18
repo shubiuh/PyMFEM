@@ -59,6 +59,7 @@ def write_setup_local():
               'mfemstpl': mfems_tpl,
               'mfemptpl': mfemp_tpl,
               'add_pumi': '',
+              'add_mumps': '',
               'add_strumpack': '',
               'add_cuda': '',
               'add_libceed': '',
@@ -92,6 +93,8 @@ def write_setup_local():
 
     if bglb.enable_pumi:
         add_extra('pumi')
+    if bglb.enable_mumps:
+        add_extra('mumps')
     if bglb.enable_strumpack:
         add_extra('strumpack')
     if bglb.enable_cuda:

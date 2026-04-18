@@ -41,7 +41,7 @@ def get_extensions():
                                  hypreinc, metisinc, hyprelib, metis5lib,
                                  cc_par, cxx_par, cc_ser, cxx_ser,
                                  cxxstdflag, mfem_outside, build_miniapps,
-                                 add_pumi, add_cuda, add_libceed, add_strumpack,
+                                 add_pumi, add_mumps, add_cuda, add_libceed, add_strumpack,
                                  add_suitesparse, add_gslibp, bdist_wheel_dir)
 
         include_dirs = [mfembuilddir, mfemincdir, mfemsrcdir,
@@ -64,6 +64,7 @@ def get_extensions():
         add_suitesparse = ''
         add_strumpack = ''
         add_pumi = ''
+        add_mumps = ''
         add_gslibp = ''
         cxxstdflag = '-std=c++17'
         mfem_outside = '0'
@@ -142,6 +143,12 @@ def get_extensions():
         from setup_local import puminc, pumilib
         modules.append("pumi")
         include_dirs.append(pumiinc)
+
+    if add_mumps == '1':
+        from setup_local import mumpsinc
+        modules.append("mumps")
+        if mumpsinc != "":
+            include_dirs.append(mumpsinc)
 
     if add_strumpack == '1':
         from setup_local import strumpackinc, strumpacklib
