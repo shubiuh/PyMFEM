@@ -29,7 +29,7 @@ myid = MPI.COMM_WORLD.rank
 smyid = '{:0>6d}'.format(myid)
 
 
-def run(order=1, meshfile='', visualization=False):
+def run(order=1, meshfile='', visualization=False, use_mumps=False):
     '''
     run ex0
     '''
@@ -77,14 +77,28 @@ def run(order=1, meshfile='', visualization=False):
     a.FormLinearSystem(boundary_dofs, x, b, A, X, B)
 
     # 9. Solve the system using PCG with symmetric Gauss-Seidel preconditioner.
-    M = mfem.HypreBoomerAMG(A)
-    cg = mfem.CGSolver(MPI.COMM_WORLD)
-    cg.SetRelTol(1e-12)
-    cg.SetMaxIter(2000)
-    cg.SetPrintLevel(1)
-    cg.SetPreconditioner(M)
-    cg.SetOperator(A)
-    cg.Mult(B, X)
+    if use_mumps:
+        try:
+            from mfem._par.mumps import MUMPSSolver
+            mumps = MUMPSSolver(MPI.COMM_WORLD)
+            mumps.SetMatrixSymType(MUMPSSolver.SYMMETRIC_POSITIVE_DEFINITE)
+            mumps.SetPrintLevel(1 if myid == 0 else 0)
+            mumps.SetOperator(A)
+            mumps.Mult(B, X)
+        except Exception as e:
+            if myid == 0:
+                print('MUMPS not available, falling back to PCG+BoomerAMG:', e)
+            use_mumps = False
+
+    if not use_mumps:
+        M = mfem.HypreBoomerAMG(A)
+        cg = mfem.CGSolver(MPI.COMM_WORLD)
+        cg.SetRelTol(1e-12)
+        cg.SetMaxIter(2000)
+        cg.SetPrintLevel(1)
+        cg.SetPreconditioner(M)
+        cg.SetOperator(A)
+        cg.Mult(B, X)
 
     # 10. Recover the solution x as a grid function and save to file. The output
     #     can be viewed using GLVis as follows: "glvis -np <np> -m mesh -g sol"
@@ -114,6 +128,9 @@ if __name__ == "__main__":
     parser.add_argument('-vis', '--visualization',
                         action='store_true',
                         help='Enable GLVis visualization')
+    parser.add_argument('-mumps', '--use-mumps',
+                        action='store_true', default=False,
+                        help='Use MUMPS direct solver instead of PCG+BoomerAMG')
 
     args = parser.parse_args()
     parser.print_options(args)
@@ -124,4 +141,5 @@ if __name__ == "__main__":
 
     run(order=order,
         meshfile=meshfile,
-        visualization=args.visualization)
+        visualization=args.visualization,
+        use_mumps=args.use_mumps)
