@@ -6,6 +6,7 @@ import sys
 import os
 import re
 import subprocess
+import tempfile
 
 __all__ = ["cmake_make_mumps"]
 
@@ -23,6 +24,53 @@ def _find_lib(name, search_dirs):
             if os.path.exists(p):
                 return p
     return None
+
+
+def _get_runpath(path):
+    result = subprocess.run(
+        ['readelf', '-d', path],
+        check=True,
+        capture_output=True,
+        text=True)
+    match = re.search(r'\(RUNPATH\)\s+Library runpath: \[(.*)\]', result.stdout)
+    if match:
+        return match.group(1)
+    match = re.search(r'\(RPATH\)\s+Library rpath: \[(.*)\]', result.stdout)
+    return match.group(1) if match else ''
+
+
+def _set_relative_rpath(path, new_rpath):
+    old_rpath = _get_runpath(path)
+    if not old_rpath or old_rpath == new_rpath:
+        return
+
+    script = (
+        'file(RPATH_CHANGE\n'
+        f'  FILE "{path}"\n'
+        f'  OLD_RPATH "{old_rpath}"\n'
+        f'  NEW_RPATH "{new_rpath}")\n'
+    )
+    with tempfile.NamedTemporaryFile('w', suffix='.cmake', delete=False,
+                                     encoding='utf-8') as stream:
+        stream.write(script)
+        script_path = stream.name
+    try:
+        subprocess.run(['cmake', '-P', script_path], check=True)
+    finally:
+        os.unlink(script_path)
+
+
+def _normalize_mumps_rpaths(prefix):
+    libdir = os.path.join(prefix, 'lib')
+    if not os.path.isdir(libdir):
+        return
+
+    for name in os.listdir(libdir):
+        if not (name.startswith('lib') and '.so' in name):
+            continue
+        if 'mumps' not in name and name != 'libpord.so':
+            continue
+        _set_relative_rpath(os.path.join(libdir, name), '$ORIGIN')
 
 
 def cmake_make_mumps():
@@ -69,6 +117,7 @@ def cmake_make_mumps():
         cmake_opts['DMUMPS_ENABLE_RPATH'] = 'ON'
     elif sys.platform in ("linux", "linux2"):
         cmake_opts['DCMAKE_INSTALL_RPATH'] = "$ORIGIN"
+        cmake_opts['DCMAKE_BUILD_WITH_INSTALL_RPATH'] = '1'
         cmake_opts['DMUMPS_ENABLE_RPATH'] = 'ON'
     
     # Enable METIS if available - must pass library and include paths explicitly
@@ -160,6 +209,8 @@ def cmake_make_mumps():
         cmake('..', **cmake_opts)
         make('mumps')
         make_install('mumps')
+        if sys.platform in ("linux", "linux2"):
+            _normalize_mumps_rpaths(bglb.mumps_prefix)
     except Exception as e:
         print("="*70)
         print("WARNING: MUMPS build failed.")
