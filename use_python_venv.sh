@@ -6,7 +6,7 @@ apt-get install -y python3-venv
 python3 -m venv .venv
 . .venv/bin/activate
 
-python -m pip install --upgrade pip setuptools wheel mpi4py matplotlib
+python -m pip install --upgrade pip setuptools wheel mpi4py matplotlib glvis requests
 # parallel version using dev branch (not work yet as mfem v4.9 has updated the cpp source code)
 # python -m pip install . -C"no-serial=Yes" -C"with-parallel=Yes" -C"with-gslib=Yes" -C"mfem-branch=dev" --verbose
 

@@ -154,6 +154,25 @@ def run(order=1, meshfile='', max_dofs=100000, max_iterations=10,
                 print('Unable to connect to GLVis server. Disabling visualization.')
             visualization = False
     
+    # 10b. Set up ParaView data collection for export
+    results_dir = os.path.join(os.path.dirname(__file__), 'results')
+    if myid == 0:
+        os.makedirs(results_dir, exist_ok=True)
+    MPI.COMM_WORLD.Barrier()  # Wait for directory creation
+    
+    paraview_dc = mfem.ParaViewDataCollection('amr_solution', mesh)
+    paraview_dc.SetPrefixPath(results_dir)
+    paraview_dc.SetLevelsOfDetail(order)
+    paraview_dc.SetDataFormat(mfem.VTKFormat_BINARY)
+    paraview_dc.SetHighOrderOutput(True)
+    paraview_dc.SetCycle(0)  # Iteration counter
+    paraview_dc.SetTime(0.0)  # Time value
+    paraview_dc.RegisterField("solution", x)
+    
+    if myid == 0:
+        print(f'\nParaView output directory: {results_dir}')
+        print('ParaView files will be saved after each AMR iteration')
+    
     # Storage for convergence history
     dofs_history = []
     error_history = []
@@ -257,6 +276,11 @@ def run(order=1, meshfile='', max_dofs=100000, max_iterations=10,
         # Update the bilinear and linear forms
         a.Update()
         b.Update()
+        
+        # Save ParaView output for this iteration
+        paraview_dc.SetCycle(it)
+        paraview_dc.SetTime(float(it))
+        paraview_dc.Save()
     
     # 12. Send final solution to GLVis
     if visualization and sol_sock.good():
@@ -303,19 +327,31 @@ def run(order=1, meshfile='', max_dofs=100000, max_iterations=10,
     
     # 14. Save final mesh and solution
     smyid = '{:0>6d}'.format(myid)
-    x.Save('sol_amr.' + smyid)
-    mesh.Print('mesh_amr.' + smyid)
+    
+    # Save traditional MFEM format
+    sol_path = os.path.join(results_dir, 'sol_amr.' + smyid)
+    mesh_path = os.path.join(results_dir, 'mesh_amr.' + smyid)
+    x.Save(sol_path)
+    mesh.Print(mesh_path)
+    
+    # Save final ParaView output
+    paraview_dc.SetCycle(len(dofs_history) - 1)
+    paraview_dc.SetTime(float(len(dofs_history) - 1))
+    paraview_dc.Save()
     
     if myid == 0:
-        print(f'\nSolution saved to: sol_amr.* and mesh_amr.*')
-        print(f'View with: glvis -np {num_procs} -m mesh_amr -g sol_amr')
+        print(f'\nSolution saved to: {results_dir}/')
+        print(f'  - MFEM format: sol_amr.* and mesh_amr.*')
+        print(f'    View with: glvis -np {num_procs} -m {mesh_path} -g {sol_path}')
+        print(f'  - ParaView format: amr_solution/amr_solution.pvd')
+        print(f'    Open {results_dir}/amr_solution/amr_solution.pvd in ParaView')
     
     # 15. Plot convergence history
     if plot_convergence and myid == 0:
-        plot_amr_convergence(dofs_history, error_history, elements_history, time_history)
+        plot_amr_convergence(dofs_history, error_history, elements_history, time_history, results_dir)
 
 
-def plot_amr_convergence(dofs_history, error_history, elements_history, time_history):
+def plot_amr_convergence(dofs_history, error_history, elements_history, time_history, results_dir='.'):
     """Plot AMR convergence history"""
     
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
@@ -371,7 +407,7 @@ def plot_amr_convergence(dofs_history, error_history, elements_history, time_his
     
     plt.tight_layout()
     
-    output_file = 'amr_convergence.png'
+    output_file = os.path.join(results_dir, 'amr_convergence.png')
     plt.savefig(output_file, dpi=150, bbox_inches='tight')
     print(f'\nConvergence plot saved to: {output_file}')
     plt.close()

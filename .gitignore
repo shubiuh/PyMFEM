@@ -27,3 +27,5 @@ examples/sol*.**
 examples/mesh*.**
 examples/**.mesh
 mfem/common/existing_mfem_headers.i
+examples/results
+examples/jupyter/.ipynb_checkpoints
