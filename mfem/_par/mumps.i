@@ -9,6 +9,7 @@
 #include "config/config.hpp"
 #include "linalg/mumps.hpp"
 #include "numpy/arrayobject.h"
+#include "../common/pyoperator.hpp"
 %}
 
 %init %{

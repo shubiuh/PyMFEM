@@ -22,11 +22,12 @@ python -m pip install --upgrade pip setuptools wheel mpi4py matplotlib glvis req
 python -m pip install . -C"with-parallel=Yes" -C"with-gslib=Yes" -C"with-mumps=Yes" -C"mfem-branch=v48"
 
 # Then, generate swig wrappers, using the swig option, together with skip-ext, so that external libraies are not rebuild.
-# python -m pip install . -C"with-parallel=Yes" -C"with-gslib=Yes" -C"with-mumps=Yes" -C"skip-ext=Yes"  -C"swig=Yes" --verbose
+python -m pip install . -C"with-parallel=Yes" -C"with-gslib=Yes" -C"with-mumps=Yes" -C"skip-ext=Yes"  -C"swig=Yes" -C"mfem-branch=v48" --verbose
 
 # If you are not happy with the wrapper (*.cxx and *.py), you edit *.i and redo the same. 
 # When you are happy, build the wrapper with skip-swig and skip-ext.
-# python -m pip install . -C"with-parallel=Yes" -C"skip-ext=Yes"  -C"skip-swig=Yes" --verbose
+python -m pip install . -C"with-parallel=Yes" -C"with-gslib=Yes" -C"with-mumps=Yes" -C"skip-ext=Yes"  -C"skip-swig=Yes" -C"mfem-branch=v48" --verbose
+# python -m pip install . -C"with-parallel=Yes" -C"skip-ext=Yes"  -C"skip-swig=Yes" -C"mfem-branch=v48" --verbose
 
 # to run the examples use
 # python3 ex0.py

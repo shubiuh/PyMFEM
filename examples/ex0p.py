@@ -80,26 +80,33 @@ def run(order=1, meshfile='', visualization=False, use_mumps=False):
     if use_mumps:
         try:
             from mfem._par.mumps import MUMPSSolver
+            start_time = MPI.Wtime()
             mumps = MUMPSSolver(MPI.COMM_WORLD)
             mumps.SetMatrixSymType(MUMPSSolver.SYMMETRIC_POSITIVE_DEFINITE)
             mumps.SetPrintLevel(1 if myid == 0 else 0)
             mumps.SetOperator(A)
+            if myid == 0:
+                print('MUMPS is available, running with MUMPS direct solver')
             mumps.Mult(B, X)
+            if myid == 0:
+                print('MUMPS solve completed in', MPI.Wtime() - start_time, 'seconds')
         except Exception as e:
             if myid == 0:
                 print('MUMPS not available, falling back to PCG+BoomerAMG:', e)
             use_mumps = False
 
     if not use_mumps:
+        start_time = MPI.Wtime()
         M = mfem.HypreBoomerAMG(A)
         cg = mfem.CGSolver(MPI.COMM_WORLD)
         cg.SetRelTol(1e-12)
         cg.SetMaxIter(2000)
-        cg.SetPrintLevel(1)
+        cg.SetPrintLevel(0)
         cg.SetPreconditioner(M)
         cg.SetOperator(A)
         cg.Mult(B, X)
-
+        if myid == 0:
+            print('PCG+BoomerAMG solve completed in', MPI.Wtime() - start_time, 'seconds')
     # 10. Recover the solution x as a grid function and save to file. The output
     #     can be viewed using GLVis as follows: "glvis -np <np> -m mesh -g sol"
     a.RecoverFEMSolution(X, b, x)
@@ -133,7 +140,8 @@ if __name__ == "__main__":
                         help='Use MUMPS direct solver instead of PCG+BoomerAMG')
 
     args = parser.parse_args()
-    parser.print_options(args)
+    if myid == 0:
+        parser.print_options(args)
 
     order = args.order
     meshfile = expanduser(
