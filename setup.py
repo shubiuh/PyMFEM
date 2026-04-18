@@ -31,6 +31,9 @@ import build_globals as bglb
 from build_mfem import *
 from build_metis import *
 from build_hypre import *
+from build_parmetis import *
+from build_scalapack import *
+from build_mumps import *
 from build_pymfem import *
 from build_libceed import *
 from build_gslib import *
@@ -180,6 +183,15 @@ class BuildPy(_build_py):
             if bglb.build_hypre:
                 download('hypre')
                 cmake_make_hypre()
+            if bglb.build_parmetis:
+                download('parmetis')
+                cmake_make_parmetis()
+            if bglb.build_scalapack:
+                download('scalapack')
+                cmake_make_scalapack()
+            if bglb.build_mumps:
+                download('mumps')
+                cmake_make_mumps()
             if bglb.build_libceed:
                 download('libceed')
                 make_libceed()

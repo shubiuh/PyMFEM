@@ -39,6 +39,7 @@ def print_config():
     print(" build miniapps: " + ("Yes" if bglb.mfem_miniapps else "No"))
     print(" build metis : " + ("Yes" if bglb.build_metis else "No"))
     print(" build hypre : " + ("Yes" if bglb.build_hypre else "No"))
+    print(" build mumps : " + ("Yes" if bglb.build_mumps else "No"))
     print(" build libceed : " + ("Yes" if bglb.build_libceed else "No"))
     print(" build gslib : " + ("Yes" if bglb.build_gslib else "No"))
     print(" call SWIG wrapper generator: " +
@@ -49,6 +50,12 @@ def print_config():
 
     print(" hypre prefix", bglb.hypre_prefix)
     print(" metis prefix", bglb.metis_prefix)
+    if bglb.enable_parmetis:
+        print(" parmetis prefix", bglb.parmetis_prefix)
+    if bglb.enable_scalapack:
+        print(" scalapack prefix", bglb.scalapack_prefix)
+    if bglb.enable_mumps:
+        print(" mumps prefix", bglb.mumps_prefix)
     print(" c compiler : " + bglb.cc_command)
     print(" c++ compiler : " + bglb.cxx_command)
     print(" mpi-c compiler : " + bglb.mpicc_command)
@@ -106,6 +113,15 @@ def initialize_cmd_options(command_obj):
 
     command_obj.with_strumpack = False
     command_obj.strumpack_prefix = ''
+
+    command_obj.with_mumps = True
+    command_obj.mumps_prefix = ''
+
+    command_obj.with_parmetis = False
+    command_obj.parmetis_prefix = ''
+
+    command_obj.with_scalapack = False
+    command_obj.scalapack_prefix = ''
 
     command_obj.with_suitesparse = False
     command_obj.suitesparse_prefix = ''
@@ -185,6 +201,12 @@ cmd_options = [
     ('gslib-only', None, 'Build gslib only'),
     ('with-strumpack', None, 'enable strumpack (parallel only)'),
     ('strumpack-prefix=', None, 'Specify locaiton of strumpack'),
+    ('with-mumps', None, 'enable mumps (parallel only)'),
+    ('mumps-prefix=', None, 'Specify locaiton of mumps'),
+    ('with-parmetis', None, 'enable parmetis (used by mumps for parallel ordering)'),
+    ('parmetis-prefix=', None, 'Specify location of parmetis'),
+    ('with-scalapack', None, 'enable scalapack (required by mumps)'),
+    ('scalapack-prefix=', None, 'Specify location of scalapack'),
     ('with-lapack', None, 'build MFEM with lapack'),
     ('blas-libraries=', None, 'Specify locaiton of Blas library (used to build MFEM)'),
     ('lapack-libraries=', None,
@@ -289,6 +311,9 @@ def configure_install(self):
     bglb.metis_64 = bool(self.with_metis64)
     bglb.enable_pumi = bool(self.with_pumi)
     bglb.enable_strumpack = bool(self.with_strumpack)
+    bglb.enable_mumps = bool(self.with_mumps)
+    bglb.enable_parmetis = bool(self.with_parmetis)
+    bglb.enable_scalapack = bool(self.with_scalapack)
     bglb.enable_cuda = bool(self.with_cuda)
     bglb.enable_cuda_hypre = bool(self.with_cuda_hypre)
     if self.cuda_arch is not None:
@@ -405,6 +430,49 @@ def configure_install(self):
     else:
         bglb.strumpack_prefix = bglb.mfem_prefix
 
+    if self.mumps_prefix != '':
+        bglb.mumps_prefix = abspath(self.mumps_prefix)
+    else:
+        bglb.mumps_prefix = bglb.mfem_prefix
+
+    if self.parmetis_prefix != '':
+        bglb.parmetis_prefix = abspath(self.parmetis_prefix)
+    else:
+        bglb.parmetis_prefix = bglb.metis_prefix  # install alongside metis
+
+    if bglb.enable_parmetis:
+        if self.parmetis_prefix != '':
+            bglb.build_parmetis = False
+        else:
+            bglb.build_parmetis = bglb.build_parallel
+
+    if self.scalapack_prefix != '':
+        bglb.scalapack_prefix = abspath(self.scalapack_prefix)
+    else:
+        bglb.scalapack_prefix = bglb.metis_prefix  # install alongside other math libs
+
+    if bglb.enable_scalapack:
+        if self.scalapack_prefix != '':
+            bglb.build_scalapack = False
+        else:
+            bglb.build_scalapack = bglb.build_parallel
+
+    if bglb.enable_mumps:
+        if self.mumps_prefix != '':
+            bglb.build_mumps = False
+        else:
+            bglb.build_mumps = bglb.build_parallel
+            # Auto-enable parmetis and scalapack when building mumps from source
+            # (matches spack spec: +parmetis)
+            if not bglb.enable_parmetis:
+                bglb.enable_parmetis = True
+                bglb.build_parmetis = bglb.build_parallel
+                bglb.parmetis_prefix = bglb.metis_prefix
+            if not bglb.enable_scalapack:
+                bglb.enable_scalapack = True
+                bglb.build_scalapack = bglb.build_parallel
+                bglb.scalapack_prefix = bglb.metis_prefix
+
     if bglb.enable_cuda:
         nvcc = find_command('nvcc')
         bglb.cuda_prefix = os.path.dirname(os.path.dirname(nvcc))
@@ -433,6 +501,9 @@ def configure_install(self):
     if bglb.skip_ext:
         bglb.build_metis = False
         bglb.build_hypre = False
+        bglb.build_parmetis = False
+        bglb.build_scalapack = False
+        bglb.build_mumps = False
         bglb.build_mfem = False
         bglb.build_mfemp = False
         bglb.build_libceed = False
@@ -458,6 +529,7 @@ def configure_install(self):
         bglb.build_mfemp = False
         bglb.build_metis = False
         bglb.build_hypre = False
+        bglb.build_mumps = False
         bglb.build_gslib = False
         bglb.build_serial = False
         bglb.build_parallel = False
@@ -471,6 +543,7 @@ def configure_install(self):
         bglb.build_mfemp = False
         bglb.build_metis = False
         bglb.build_hypre = False
+        bglb.build_mumps = False
         bglb.build_serial = False
         bglb.build_libceed = False
         bglb.build_gslib = True

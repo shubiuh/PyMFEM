@@ -12,7 +12,7 @@ __all__ = ["swig_command", "rootdir", "extdir",
 # ----------------------------------------------------------------------------------------
 #  package directory
 # ----------------------------------------------------------------------------------------
-rootdir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..")
+rootdir = os.path.realpath(os.path.join(os.path.abspath(os.path.dirname(__file__)), ".."))
 extdir = os.path.join(rootdir, 'external')
 if not os.path.exists(extdir):
     os.mkdir(os.path.join(rootdir, 'external'))
@@ -110,6 +110,35 @@ REPOS = dict(
                 "1.0.8", None, "https://github.com/Nek5000/gslib/archive/refs/tags/v1.0.8.tar.gz"),
             release(
                 "1.0.9", None, "https://github.com/Nek5000/gslib/archive/refs/tags/v1.0.9.tar.gz"),
+        ]
+    ),
+    parmetis=dict(
+        url="https://github.com/KarypisLab/ParMETIS",
+        releases=[
+            release(
+                "4.0.3", None, "https://github.com/mfem/tpls/raw/gh-pages/parmetis-4.0.3.tar.gz"),
+        ]
+    ),
+    scalapack=dict(
+        url="https://github.com/Reference-ScaLAPACK/scalapack",
+        releases=[
+            release(
+                "2.2.0", None, "https://github.com/Reference-ScaLAPACK/scalapack/archive/refs/tags/v2.2.0.tar.gz"),
+            release(
+                "2.2.1", None, "https://github.com/Reference-ScaLAPACK/scalapack/archive/refs/tags/v2.2.1.tar.gz"),
+        ]
+    ),
+    mumps=dict(
+        url="https://github.com/scivision/mumps-superbuild",
+        releases=[
+            release(
+                "5.7.3.1", None, "https://github.com/scivision/mumps-superbuild/archive/refs/tags/v5.7.3.1.tar.gz"),
+            release(
+                "5.8.0.0", None, "https://github.com/scivision/mumps-superbuild/archive/refs/tags/v5.8.0.0.tar.gz"),
+            release(
+                "5.8.1.0", None, "https://github.com/scivision/mumps-superbuild/archive/refs/tags/v5.8.1.0.tar.gz"),
+            release(
+                "5.8.2.2", None, "https://github.com/scivision/mumps-superbuild/archive/refs/tags/v5.8.2.2.tar.gz"),
         ]
     ),
 )

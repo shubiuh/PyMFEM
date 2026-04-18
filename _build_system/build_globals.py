@@ -18,6 +18,7 @@ build_metis = False
 build_hypre = False
 build_libceed = False
 build_gslib = False
+build_mumps = False
 build_parallel = False
 build_serial = False
 
@@ -38,6 +39,14 @@ enable_pumi = False
 pumi_prefix = ''
 enable_strumpack = False
 strumpack_prefix = ''
+enable_mumps = False
+mumps_prefix = ''
+build_parmetis = False
+enable_parmetis = False
+parmetis_prefix = ''
+build_scalapack = False
+enable_scalapack = False
+scalapack_prefix = ''
 enable_libceed = False
 libceed_prefix = ''
 libceed_only = False
@@ -81,6 +90,8 @@ cxx_command = 'c++' if os.getenv("CC") is None else os.getenv("CXX")
 mpicc_command = 'mpicc' if os.getenv("MPICC") is None else os.getenv("MPICC")
 mpicxx_command = 'mpic++' if os.getenv(
     "MPICXX") is None else os.getenv("MPICXX")
+mpifort_command = 'mpif90' if os.getenv(
+    "MPIFORT") is None else os.getenv("MPIFORT")
 cxxstd_flag = '-std=c++17' if os.getenv(
     "CXXSTDFLAG") is None else os.getenv("CXXSTDFLAG")
 

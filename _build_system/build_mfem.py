@@ -5,6 +5,7 @@ import sys
 import os
 import re
 import subprocess
+from glob import glob
 
 __all__ = ["cmake_make_mfem"]
 
@@ -12,6 +13,11 @@ from build_consts import *
 from build_utils import *
 
 import build_globals as bglb
+
+
+def _find_cmake_package_dir(prefix, pattern):
+    matches = sorted(glob(os.path.join(prefix, 'lib', 'cmake', pattern)))
+    return matches[0] if matches else prefix
 
 
 def cmake_make_mfem(serial=True):
@@ -100,6 +106,38 @@ def cmake_make_mfem(serial=True):
             libpath = os.path.dirname(
                 find_libpath_from_prefix("STRUMPACK", bglb.strumpack_prefix))
             add_rpath(libpath, ex_loc)
+        if bglb.enable_mumps:
+            # MUMPS requires:
+            # - dmumps/smumps (precision-specific library)
+            # - mumps_common
+            # - pord (MUMPS internal ordering library)
+            # - ScaLAPACK (distributed linear algebra)
+            # - LAPACK/BLAS
+            # - MPI Fortran library
+            cmake_opts['DMFEM_USE_MUMPS'] = '1'
+            cmake_opts['DMUMPS_DIR'] = bglb.mumps_prefix
+            if bglb.enable_parmetis:
+                cmake_opts['DParMETIS_DIR'] = bglb.parmetis_prefix
+            if bglb.enable_scalapack:
+                scalapack_cmake_dir = _find_cmake_package_dir(
+                    bglb.scalapack_prefix, 'scalapack-*')
+                cmake_opts['DScaLAPACK_DIR'] = scalapack_cmake_dir
+                cmake_opts['Dscalapack_DIR'] = scalapack_cmake_dir
+            
+            # Find MUMPS library path (try dmumps first, then smumps)
+            try:
+                libpath = os.path.dirname(
+                    find_libpath_from_prefix("dmumps", bglb.mumps_prefix))
+            except:
+                libpath = os.path.dirname(
+                    find_libpath_from_prefix("smumps", bglb.mumps_prefix))
+            add_rpath(libpath, ex_loc)
+            
+            # MUMPS requires LAPACK, so ensure it's enabled
+            if not bglb.enable_lapack:
+                print("WARNING: MUMPS requires LAPACK. Enabling LAPACK automatically.")
+                bglb.enable_lapack = True
+                
         if bglb.enable_pumi:
             cmake_opts['DMFEM_USE_PUMI'] = '1'
             cmake_opts['DPUMI_DIR'] = bglb.pumi_prefix
