@@ -218,8 +218,9 @@ def run(order=1,
     if use_mumps:
         # Use MUMPS direct solver for indefinite systems
         try:
-            mumps = mfem.MUMPSSolver(MPI.COMM_WORLD)
-            mumps.SetMatrixSymType(mfem.MUMPSSolver.MatType_UNSYMMETRIC)
+            from mfem._par.mumps import MUMPSSolver
+            mumps = MUMPSSolver(MPI.COMM_WORLD)
+            mumps.SetMatrixSymType(MUMPSSolver.UNSYMMETRIC)
             mumps.SetPrintLevel(1 if myid == 0 else 0)
             mumps.SetOperator(AA)
             mumps.Mult(B, X)

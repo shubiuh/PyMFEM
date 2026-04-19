@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
     parser = ArgParser(description='Ex1 (Laplace Problem)')
     parser.add_argument('-m', '--mesh',
-                        default='star.mesh',
+                        default='inline-hex.mesh',
                         action='store', type=str,
                         help='Mesh file to use.')
     parser.add_argument('-o', '--order',

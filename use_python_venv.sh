@@ -8,6 +8,8 @@ apt-get install -y libblas-dev liblapack-dev gfortran
 python3 -m venv .venv
 . .venv/bin/activate
 
+ln -sfn /workspace/results /volume/volume1/pymfem_cpu_dev/PyMFEM/examples/results 
+
 python -m pip install --upgrade pip setuptools wheel mpi4py matplotlib glvis requests
 # parallel version using dev branch (not work yet as mfem v4.9 has updated the cpp source code)
 # python -m pip install . -C"no-serial=Yes" -C"with-parallel=Yes" -C"with-gslib=Yes" -C"mfem-branch=dev" --verbose
