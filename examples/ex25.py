@@ -37,7 +37,11 @@ def run(meshfile="",
         visualization=1,
         herm_conv=True,
         device_config='cpu',
-        pa=False):
+        pa=False,
+        solve_complex_matrix=False):
+
+    if solve_complex_matrix and pa:
+        raise ValueError("Complex matrix solve requires full assembly.")
 
     # 2. Enable hardware devices such as GPUs, and programming models such as
     #    CUDA, OCCA, RAJA and OpenMP based on command line options.
@@ -267,6 +271,7 @@ def run(meshfile="",
     B = mfem.Vector()
     X = mfem.Vector()
     a.FormLinearSystem(ess_tdof_list, x, b, A, X, B)
+    system_op = A.AsComplexOperator() if solve_complex_matrix else A.Ptr()
 
     # 14a. Set up the Bilinear form a(.,.) for the preconditioner
     #
@@ -340,7 +345,7 @@ def run(meshfile="",
         # gmres.SetMaxIter(1)
         gmres.SetRelTol(1e-5)
         gmres.SetAbsTol(0.0)
-        gmres.SetOperator(A.Ptr())
+        gmres.SetOperator(system_op)
         gmres.SetPreconditioner(BlockDP)
         gmres.Mult(B, X)
 
@@ -783,6 +788,9 @@ if __name__ == "__main__":
     parser.add_argument("-pa", "--partial-assembly",
                         action='store_true',
                         help="Enable Partial Assembly.")
+    parser.add_argument("-cm", "--complex-matrix",
+                        action='store_true',
+                        help="Solve the formed linear system through its complex operator instead of the default real block operator. Requires full assembly.")
     parser.add_argument("-d", "--device",
                         default="cpu", type=str,
                         help="Device configuration string, see Device::Configure().")
@@ -801,4 +809,5 @@ if __name__ == "__main__":
         visualization=args.visualization,
         herm_conv=args.no_hermitian,
         device_config=args.device,
-        pa=args.partial_assembly)
+        pa=args.partial_assembly,
+        solve_complex_matrix=args.complex_matrix)
