@@ -39,12 +39,29 @@ python -m pip install . -C"with-parallel=Yes" -C"with-gslib=Yes" -C"with-mumps=Y
 # python3 ex0.py
 # mpirun --allow-run-as-root -n 4 python3 ex0p.py -mumps
 
-# build with pardiso
+# build with pardiso and suitesparse
 python -m pip install . \
   -C"with-parallel=Yes" \
   -C"with-gslib=Yes" \
   -C"with-mumps=Yes" \
   -C"with-mkl-pardiso=Yes" \
   -C"with-mkl-cpardiso=Yes" \
+  -C"with-suitesparse=Yes" \
   -C"mfem-branch=v48" \
   --verbose
+
+# PC
+docker run --gpus all --cap-add=SYS_PTRACE \
+  -p 3000:3000 -p 8000:8000 -p 8080:8080 \
+  --name ws_dev \
+  -v D:/docker_ws:/workspace \
+  -v docker_ws_volume:/volume \
+  shubinuh/spack-hpc:v2.3.7
+
+# cot-42
+docker run --rm -it \
+  -p 3000:3000 -p 8000:8000 -p 8080:8080 \
+  -v docker_ws_volume:/volume \
+  --name ws_dev \
+  -v /export/home/mnle8/01_szeng/docker_ws:/docker_ws \
+  shubinuh/spack-hpc:v2.3.7 bash && cd /docker_ws/PyMFEM_dev

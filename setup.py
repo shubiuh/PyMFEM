@@ -34,6 +34,7 @@ from build_hypre import *
 from build_parmetis import *
 from build_scalapack import *
 from build_mumps import *
+from build_suitesparse import *
 from build_pymfem import *
 from build_libceed import *
 from build_gslib import *
@@ -192,6 +193,9 @@ class BuildPy(_build_py):
             if bglb.build_mumps:
                 download('mumps')
                 cmake_make_mumps()
+            if bglb.build_suitesparse:
+                download('suitesparse')
+                cmake_make_suitesparse()
             if bglb.build_libceed:
                 download('libceed')
                 make_libceed()

@@ -141,4 +141,11 @@ REPOS = dict(
                 "5.8.2.2", None, "https://github.com/scivision/mumps-superbuild/archive/refs/tags/v5.8.2.2.tar.gz"),
         ]
     ),
+    suitesparse=dict(
+        url="https://github.com/DrTimothyAldenDavis/SuiteSparse",
+        releases=[
+            release(
+                "7.8.3", None, "https://github.com/DrTimothyAldenDavis/SuiteSparse/archive/refs/tags/v7.8.3.tar.gz"),
+        ]
+    ),
 )

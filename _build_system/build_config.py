@@ -88,6 +88,7 @@ def print_config():
     print(" build metis : " + ("Yes" if bglb.build_metis else "No"))
     print(" build hypre : " + ("Yes" if bglb.build_hypre else "No"))
     print(" build mumps : " + ("Yes" if bglb.build_mumps else "No"))
+    print(" build suitesparse : " + ("Yes" if bglb.build_suitesparse else "No"))
     print(" build libceed : " + ("Yes" if bglb.build_libceed else "No"))
     print(" build gslib : " + ("Yes" if bglb.build_gslib else "No"))
     print(" call SWIG wrapper generator: " +
@@ -104,6 +105,8 @@ def print_config():
         print(" scalapack prefix", bglb.scalapack_prefix)
     if bglb.enable_mumps:
         print(" mumps prefix", bglb.mumps_prefix)
+    if bglb.enable_suitesparse:
+        print(" suitesparse prefix", bglb.suitesparse_prefix)
     if bglb.enable_mkl_pardiso:
         print(" mkl pardiso prefix", bglb.mkl_pardiso_prefix)
         print(" mkl library dir", bglb.mkl_library_dir)
@@ -254,7 +257,8 @@ cmd_options = [
     ('with-pumi', None, 'enable pumi (parallel only)'),
     ('pumi-prefix=', None, 'Specify locaiton of pumi'),
     ('with-suitesparse', None,
-     'build MFEM with suitesparse (MFEM_USE_SUITESPARSE=YES) (parallel only)'),
+     'build MFEM with SuiteSparse (MFEM_USE_SUITESPARSE=YES; enables UMFPackSolver, KLU, CHOLMOD etc.)'),
+
     ('suitesparse-prefix=', None,
      'Specify locaiton of suitesparse (=SuiteSparse_DIR)'),
     ('with-libceed', None, 'enable libceed'),
@@ -494,8 +498,13 @@ def configure_install(self):
             bglb.gslibp_prefix = bglb.mfemp_prefix
             bglb.build_gslib = True
 
-    if bglb.enable_suitesparse and self.suitesparse_prefix != '':
-        bglb.suitesparse_prefix = self.suitesparse_prefix
+    if bglb.enable_suitesparse:
+        if self.suitesparse_prefix != '':
+            bglb.suitesparse_prefix = abspath(self.suitesparse_prefix)
+            bglb.build_suitesparse = False
+        else:
+            bglb.suitesparse_prefix = bglb.mfem_prefix
+            bglb.build_suitesparse = True
 
     if self.pumi_prefix != '':
         bglb.pumi_prefix = abspath(self.pumi_prefix)

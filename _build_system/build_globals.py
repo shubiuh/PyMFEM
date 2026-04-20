@@ -72,6 +72,7 @@ mfem_debug = False
 mfem_miniapps = True
 
 enable_suitesparse = False
+build_suitesparse = False
 suitesparse_prefix = "/usr/"
 
 enable_lapack = False
