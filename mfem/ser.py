@@ -111,6 +111,11 @@ try:
 except:
    pass
 
+try:
+   from  mfem._ser.pardiso import *
+except:
+   pass
+
 #
 #  import moduleds built from hpp/cpp under miniapp
 #

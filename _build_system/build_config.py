@@ -30,6 +30,54 @@ from build_consts import *
 import build_globals as bglb
 
 
+def _default_mkl_prefix():
+    mklroot = os.getenv('MKLROOT', '').strip()
+    if mklroot != '':
+        return os.path.abspath(mklroot)
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, 'external', 'intel', 'oneapi', 'mkl', 'latest')
+
+
+def _default_mkl_library_dir(prefix):
+    candidates = [
+        os.path.join(prefix, 'lib', 'x86_64-linux-gnu'),
+        os.path.join(prefix, 'lib', 'intel64'),
+        os.path.join(prefix, 'lib'),
+    ]
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    return candidates[0]
+
+
+def _default_mkl_compiler_dir(prefix):
+    prefix_parent = os.path.dirname(os.path.dirname(prefix))
+    candidates = [
+        os.path.join(prefix_parent, 'compiler', 'latest', 'lib', 'intel64_lin'),
+        os.path.join(prefix_parent, 'compiler', 'latest', 'lib'),
+        '/usr/lib/x86_64-linux-gnu',
+    ]
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    return candidates[0]
+
+
+def _default_mkl_mpi_wrapper_lib():
+    return os.getenv('MKL_MPI_WRAPPER_LIB', 'mkl_blacs_openmpi_lp64').strip()
+
+
+def _default_mkl_include_dir(prefix):
+    candidates = [
+        os.path.join(prefix, 'include', 'mkl'),
+        os.path.join(prefix, 'include'),
+    ]
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    return candidates[0]
+
+
 def print_config():
     print("----configuration----")
     print(" prefix", bglb.prefix)
@@ -56,13 +104,21 @@ def print_config():
         print(" scalapack prefix", bglb.scalapack_prefix)
     if bglb.enable_mumps:
         print(" mumps prefix", bglb.mumps_prefix)
-    print(" c compiler : " + bglb.cc_command)
-    print(" c++ compiler : " + bglb.cxx_command)
-    print(" mpi-c compiler : " + bglb.mpicc_command)
-    print(" mpi-c++ compiler : " + bglb.mpicxx_command)
+    if bglb.enable_mkl_pardiso:
+        print(" mkl pardiso prefix", bglb.mkl_pardiso_prefix)
+        print(" mkl library dir", bglb.mkl_library_dir)
+        print(" mkl compiler dir", bglb.mkl_compiler_dir)
+    if bglb.enable_mkl_cpardiso:
+        print(" mkl cpardiso prefix", bglb.mkl_cpardiso_prefix)
+        print(" mkl library dir", bglb.mkl_library_dir)
+        print(" mkl mpi wrapper lib", bglb.mkl_mpi_wrapper_lib)
+    print(f" c compiler : {bglb.cc_command}")
+    print(f" c++ compiler : {bglb.cxx_command}")
+    print(f" mpi-c compiler : {bglb.mpicc_command}")
+    print(f" mpi-c++ compiler : {bglb.mpicxx_command}")
 
     print(" verbose : " + ("Yes" if bglb.verbose else "No"))
-    print(" SWIG : " + swig_command)
+    print(f" SWIG : {swig_command}")
 
     if bglb.blas_libraries != "":
         print(" BLAS libraries : " + bglb.blas_libraries)
@@ -116,6 +172,14 @@ def initialize_cmd_options(command_obj):
 
     command_obj.with_mumps = True
     command_obj.mumps_prefix = ''
+    command_obj.with_mkl_pardiso = False
+    command_obj.mkl_pardiso_prefix = ''
+    command_obj.with_mkl_cpardiso = False
+    command_obj.mkl_cpardiso_prefix = ''
+    command_obj.mkl_library_dir = ''
+    command_obj.mkl_compiler_dir = ''
+    command_obj.mkl_mpi_wrapper_lib = ''
+    command_obj.mkl_include_dir = ''
 
     command_obj.with_parmetis = False
     command_obj.parmetis_prefix = ''
@@ -203,6 +267,14 @@ cmd_options = [
     ('strumpack-prefix=', None, 'Specify locaiton of strumpack'),
     ('with-mumps', None, 'enable mumps (parallel only)'),
     ('mumps-prefix=', None, 'Specify locaiton of mumps'),
+    ('with-mkl-pardiso', None, 'enable Intel MKL Pardiso solver support'),
+    ('mkl-pardiso-prefix=', None, 'Specify location of Intel oneMKL for Pardiso'),
+    ('with-mkl-cpardiso', None, 'enable Intel MKL Cluster Pardiso solver support (parallel only)'),
+    ('mkl-cpardiso-prefix=', None, 'Specify location of Intel oneMKL for Cluster Pardiso'),
+    ('mkl-library-dir=', None, 'Specify full path to the Intel oneMKL library directory'),
+    ('mkl-compiler-dir=', None, 'Specify full path to the Intel compiler runtime library directory'),
+    ('mkl-mpi-wrapper-lib=', None, 'Specify the MKL BLACS MPI wrapper library name, e.g. mkl_blacs_openmpi_lp64'),
+    ('mkl-include-dir=', None, 'Specify full path to the Intel oneMKL include directory'),
     ('with-parmetis', None, 'enable parmetis (used by mumps for parallel ordering)'),
     ('parmetis-prefix=', None, 'Specify location of parmetis'),
     ('with-scalapack', None, 'enable scalapack (required by mumps)'),
@@ -312,6 +384,8 @@ def configure_install(self):
     bglb.enable_pumi = bool(self.with_pumi)
     bglb.enable_strumpack = bool(self.with_strumpack)
     bglb.enable_mumps = bool(self.with_mumps)
+    bglb.enable_mkl_pardiso = bool(self.with_mkl_pardiso)
+    bglb.enable_mkl_cpardiso = bool(self.with_mkl_cpardiso)
     bglb.enable_parmetis = bool(self.with_parmetis)
     bglb.enable_scalapack = bool(self.with_scalapack)
     bglb.enable_cuda = bool(self.with_cuda)
@@ -344,6 +418,9 @@ def configure_install(self):
             import mpi4py
         except ImportError:
             assert False, "Can not import mpi4py"
+
+    if bglb.enable_mkl_cpardiso and not bglb.build_parallel:
+        assert False, "with-mkl-cpardiso requires with-parallel"
 
     if self.mfem_prefix != '':
         bglb.mfem_prefix = abspath(self.mfem_prefix)
@@ -435,6 +512,40 @@ def configure_install(self):
     else:
         bglb.mumps_prefix = bglb.mfem_prefix
 
+    if self.mkl_pardiso_prefix != '':
+        bglb.mkl_pardiso_prefix = abspath(self.mkl_pardiso_prefix)
+    else:
+        bglb.mkl_pardiso_prefix = _default_mkl_prefix()
+
+    if self.mkl_cpardiso_prefix != '':
+        bglb.mkl_cpardiso_prefix = abspath(self.mkl_cpardiso_prefix)
+    elif bglb.mkl_pardiso_prefix != '':
+        bglb.mkl_cpardiso_prefix = bglb.mkl_pardiso_prefix
+    else:
+        bglb.mkl_cpardiso_prefix = _default_mkl_prefix()
+
+    if self.mkl_library_dir != '':
+        bglb.mkl_library_dir = abspath(self.mkl_library_dir)
+    else:
+        base_prefix = bglb.mkl_cpardiso_prefix if bglb.enable_mkl_cpardiso else bglb.mkl_pardiso_prefix
+        bglb.mkl_library_dir = _default_mkl_library_dir(base_prefix)
+
+    if self.mkl_compiler_dir != '':
+        bglb.mkl_compiler_dir = abspath(self.mkl_compiler_dir)
+    else:
+        bglb.mkl_compiler_dir = _default_mkl_compiler_dir(bglb.mkl_pardiso_prefix)
+
+    if self.mkl_mpi_wrapper_lib != '':
+        bglb.mkl_mpi_wrapper_lib = self.mkl_mpi_wrapper_lib.strip()
+    else:
+        bglb.mkl_mpi_wrapper_lib = _default_mkl_mpi_wrapper_lib()
+
+    if self.mkl_include_dir != '':
+        bglb.mkl_include_dir = abspath(self.mkl_include_dir)
+    else:
+        base_prefix = bglb.mkl_cpardiso_prefix if bglb.enable_mkl_cpardiso else bglb.mkl_pardiso_prefix
+        bglb.mkl_include_dir = _default_mkl_include_dir(base_prefix)
+
     if self.parmetis_prefix != '':
         bglb.parmetis_prefix = abspath(self.parmetis_prefix)
     else:
@@ -475,6 +586,7 @@ def configure_install(self):
 
     if bglb.enable_cuda:
         nvcc = find_command('nvcc')
+        assert nvcc is not None, "nvcc not found but with-cuda was requested"
         bglb.cuda_prefix = os.path.dirname(os.path.dirname(nvcc))
 
     if self.CC != '':

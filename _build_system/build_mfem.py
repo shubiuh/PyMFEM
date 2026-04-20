@@ -20,6 +20,10 @@ def _find_cmake_package_dir(prefix, pattern):
     return matches[0] if matches else prefix
 
 
+def _mkl_find_root(path):
+    return os.path.dirname(path) if os.path.basename(path) in ('lib', 'intel64') else path
+
+
 def cmake_make_mfem(serial=True):
     '''
     build MFEM
@@ -52,6 +56,7 @@ def cmake_make_mfem(serial=True):
                   'DMFEM_ENABLE_MINIAPPS': '1',
                   'DCMAKE_SHARED_LINKER_FLAGS': ldflags,
                   'DMFEM_USE_ZLIB': '1',
+                  'DCMAKE_MODULE_PATH': os.path.join(rootdir, '_build_system', 'cmake'),
                   'DCMAKE_CXX_FLAGS': bglb.cxxstd_flag,
                   'DCMAKE_BUILD_WITH_INSTALL_RPATH': '1'}
 
@@ -137,6 +142,13 @@ def cmake_make_mfem(serial=True):
             if not bglb.enable_lapack:
                 print("WARNING: MUMPS requires LAPACK. Enabling LAPACK automatically.")
                 bglb.enable_lapack = True
+
+        if bglb.enable_mkl_cpardiso:
+            cmake_opts['DMFEM_USE_MKL_CPARDISO'] = '1'
+            cmake_opts['DMKL_CPARDISO_DIR'] = bglb.mkl_cpardiso_prefix
+            cmake_opts['DMKL_LIBRARY_DIR'] = bglb.mkl_library_dir
+            cmake_opts['DMKL_MPI_WRAPPER_LIB'] = bglb.mkl_mpi_wrapper_lib
+            add_rpath(bglb.mkl_library_dir, ex_loc)
                 
         if bglb.enable_pumi:
             cmake_opts['DMFEM_USE_PUMI'] = '1'
@@ -201,6 +213,15 @@ def cmake_make_mfem(serial=True):
         cmake_opts['DBLAS_LIBRARIES'] = bglb.blas_libraries
     if bglb.lapack_libraries != "":
         cmake_opts['DLAPACK_LIBRARIES'] = bglb.lapack_libraries
+
+    if bglb.enable_mkl_pardiso:
+        cmake_opts['DMFEM_USE_MKL_PARDISO'] = '1'
+        cmake_opts['DMKL_PARDISO_DIR'] = bglb.mkl_pardiso_prefix
+        cmake_opts['DMKL_LIBRARY_DIR'] = bglb.mkl_library_dir
+        cmake_opts['DMKL_COMPILER_DIR'] = bglb.mkl_compiler_dir
+        cmake_opts['DMKL_PARDISO_INCLUDE_DIR'] = bglb.mkl_include_dir
+        add_rpath(bglb.mkl_library_dir, ex_loc)
+        add_rpath(bglb.mkl_compiler_dir, ex_loc)
 
     cmake_opts['DCMAKE_INSTALL_RPATH'] = ";".join(rpaths)
 

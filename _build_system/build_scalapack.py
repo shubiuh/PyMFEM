@@ -29,6 +29,42 @@ def _patch_scalapack_blacs_cmake(path):
         stream.write(content.replace(legacy, updated, 1))
 
 
+def _default_mkl_blas_lapack_libraries():
+    if bglb.mkl_library_dir == '':
+        return ''
+
+    candidates = [
+        os.path.join(bglb.mkl_library_dir, 'libmkl_gf_lp64.so'),
+        os.path.join(bglb.mkl_library_dir, 'libmkl_intel_lp64.so'),
+    ]
+    interface_lib = next((path for path in candidates if os.path.exists(path)), '')
+    if interface_lib == '':
+        return ''
+
+    thread_candidates = [
+        os.path.join(bglb.mkl_library_dir, 'libmkl_gnu_thread.so'),
+        os.path.join(bglb.mkl_library_dir, 'libmkl_intel_thread.so'),
+        os.path.join(bglb.mkl_library_dir, 'libmkl_sequential.so'),
+    ]
+    thread_lib = next((path for path in thread_candidates if os.path.exists(path)), '')
+    if thread_lib == '':
+        return ''
+
+    core_lib = os.path.join(bglb.mkl_library_dir, 'libmkl_core.so')
+    if not os.path.exists(core_lib):
+        return ''
+
+    libraries = [interface_lib, thread_lib, core_lib]
+    if os.path.basename(thread_lib) == 'libmkl_gnu_thread.so':
+        libraries.extend(['gomp', 'pthread', 'm', 'dl'])
+    elif os.path.basename(thread_lib) == 'libmkl_intel_thread.so':
+        libraries.extend(['iomp5', 'pthread', 'm', 'dl'])
+    else:
+        libraries.extend(['pthread', 'm', 'dl'])
+
+    return ';'.join(libraries)
+
+
 def cmake_make_scalapack():
     '''
     Build ScaLAPACK (Scalable Linear Algebra PACKage) using CMake.
@@ -75,11 +111,20 @@ def cmake_make_scalapack():
         'DCMAKE_Fortran_FLAGS': '-fallow-argument-mismatch',
     }
 
+    auto_mkl_libs = ''
+    if ((bglb.enable_mkl_pardiso or bglb.enable_mkl_cpardiso) and
+            bglb.blas_libraries == '' and bglb.lapack_libraries == ''):
+        auto_mkl_libs = _default_mkl_blas_lapack_libraries()
+
     # Pass explicit BLAS/LAPACK paths if known
     if bglb.blas_libraries != "":
         cmake_opts['DBLAS_LIBRARIES'] = bglb.blas_libraries
+    elif auto_mkl_libs != '':
+        cmake_opts['DBLAS_LIBRARIES'] = auto_mkl_libs
     if bglb.lapack_libraries != "":
         cmake_opts['DLAPACK_LIBRARIES'] = bglb.lapack_libraries
+    elif auto_mkl_libs != '':
+        cmake_opts['DLAPACK_LIBRARIES'] = auto_mkl_libs
 
     if sys.platform in ("linux", "linux2"):
         cmake_opts['DCMAKE_INSTALL_RPATH'] = '$ORIGIN'

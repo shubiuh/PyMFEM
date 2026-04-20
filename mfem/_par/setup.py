@@ -196,9 +196,13 @@ def get_extensions():
     if mfem_outside == "0" and sys.platform  in ("linux", "linux2"):
         runtime_library_dirs.append("$ORIGIN/../external/par/lib")
         runtime_library_dirs.append("$ORIGIN/../external/lib")
+        if mkllib != "":
+            runtime_library_dirs.append(mkllib)
     elif mfem_outside == "0" and sys.platform  == "darwin":
         runtime_library_dirs.append("@loader_path/../external/par/lib")
         runtime_library_dirs.append("@loader_path/../external/lib")
+        if mkllib != "":
+            runtime_library_dirs.append(mkllib)
     else:
         runtime_library_dirs = library_dirs
 

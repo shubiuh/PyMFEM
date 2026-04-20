@@ -115,6 +115,16 @@ try:
 except:
     pass
 
+try:
+    from  mfem._par.pardiso import *
+except:
+    pass
+
+try:
+    from  mfem._par.cpardiso import *
+except:
+    pass
+
 import mfem._par.array as array
 import mfem._par.blockoperator as blockoperator
 import mfem._par.coefficient as coefficient

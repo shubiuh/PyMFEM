@@ -60,6 +60,8 @@ def write_setup_local():
               'mfemptpl': mfemp_tpl,
               'add_pumi': '',
               'add_mumps': '',
+              'add_mkl_pardiso': '',
+              'add_mkl_cpardiso': '',
               'add_strumpack': '',
               'add_cuda': '',
               'add_libceed': '',
@@ -68,6 +70,8 @@ def write_setup_local():
               'add_gslibp': '',
               'add_gslibs': '',
               'libceedinc': os.path.join(bglb.libceed_prefix, 'include'),
+              'mklinc': bglb.mkl_include_dir,
+              'mkllib': bglb.mkl_library_dir,
               'gslibsinc': os.path.join(bglb.gslibs_prefix, 'include'),
               'gslibpinc': os.path.join(bglb.gslibp_prefix, 'include'),
               'cxxstdflag': bglb.cxxstd_flag,
@@ -95,6 +99,10 @@ def write_setup_local():
         add_extra('pumi')
     if bglb.enable_mumps:
         add_extra('mumps')
+    if bglb.enable_mkl_pardiso:
+        params['add_mkl_pardiso'] = '1'
+    if bglb.enable_mkl_cpardiso:
+        params['add_mkl_cpardiso'] = '1'
     if bglb.enable_strumpack:
         add_extra('strumpack')
     if bglb.enable_cuda:
@@ -195,6 +203,8 @@ def generate_wrapper(do_parallel):
     if bglb.enable_suitesparse:
         serflag.append('-I' + os.path.join(bglb.suitesparse_prefix,
                                            'include', 'suitesparse'))
+    if bglb.enable_mkl_pardiso:
+        serflag.append('-I' + bglb.mkl_include_dir)
 
     for filename in ['lininteg.i', 'bilininteg.i']:
         command = [swig_command] + swigflag + serflag + [filename]
@@ -227,6 +237,8 @@ def generate_wrapper(do_parallel):
 
     if bglb.enable_pumi:
         parflag.append('-I' + os.path.join(bglb.pumi_prefix, 'include'))
+    if bglb.enable_mkl_pardiso or bglb.enable_mkl_cpardiso:
+        parflag.append('-I' + bglb.mkl_include_dir)
     if bglb.enable_strumpack:
         parflag.append('-I' + os.path.join(bglb.strumpack_prefix, 'include'))
     if bglb.enable_suitesparse:
@@ -235,6 +247,10 @@ def generate_wrapper(do_parallel):
 
     commands = []
     for filename in ifiles():
+        if filename == 'cpardiso.i' and not bglb.enable_mkl_cpardiso:
+            continue
+        if filename == 'pardiso.i' and not bglb.enable_mkl_pardiso:
+            continue
         if filename == 'strumpack.i' and not bglb.enable_strumpack:
             continue
         if not check_new(filename):
