@@ -40,7 +40,7 @@ def get_extensions():
                                  cc_ser, cxx_ser,
                                  cxxstdflag, mfem_outside, build_miniapps,
                                  add_cuda, add_libceed, add_suitesparse, add_gslibs,
-                                 bdist_wheel_dir)
+                                 bdist_wheel_dir, mkllib)
 
         include_dirs = [mfemserbuilddir, mfemserincdir, mfemsrcdir, numpyinc,]
         library_dirs = [mfemserlnkdir, ]
@@ -61,6 +61,7 @@ def get_extensions():
         cxxstdflag = '-std=c++17'
         mfem_outside = '0'
         build_miniapps = '0'
+        mkllib = ''
 
 
     libraries = ['mfem']
