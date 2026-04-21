@@ -14,7 +14,7 @@ python3 -m venv .venv
 
 ln -sfn /workspace/results /volume/volume1/pymfem_cpu_dev/PyMFEM_dev/examples/results 
 
-python -m pip install --upgrade pip setuptools wheel mpi4py matplotlib glvis requests
+python -m pip install --upgrade pip setuptools wheel mpi4py matplotlib glvis requests pytest
 # parallel version using dev branch (not work yet as mfem v4.9 has updated the cpp source code)
 # python -m pip install . -C"no-serial=Yes" -C"with-parallel=Yes" -C"with-gslib=Yes" -C"mfem-branch=dev" --verbose
 
@@ -48,8 +48,8 @@ python -m pip install . \
   -C"with-mkl-cpardiso=Yes" \
   -C"with-suitesparse=Yes" \
   -C"mfem-branch=v48" \
-  -C"skip-ext=Yes" \
-  -C"skip-swig=Yes" \
+  -C"skip-ext=No" \
+  -C"skip-swig=No" \
   --verbose
 
 # PC
@@ -67,3 +67,8 @@ docker run --rm -it \
   --name ws_dev \
   -v /export/home/mnle8/01_szeng/docker_ws:/docker_ws \
   shubinuh/spack-hpc:v2.3.7 bash && cd /docker_ws/PyMFEM_dev
+
+export LD_LIBRARY_PATH=/docker_ws/PyMFEM_dev/external/intel/oneapi/mkl/2025.3/lib:$LD_LIBRARY_PATH
+
+mpirun --allow-run-as-root -np 16 python3 ex0p.py \
+  --use-cpardiso --full-assembly -r 2 -o 3 -m inline-hex.mesh

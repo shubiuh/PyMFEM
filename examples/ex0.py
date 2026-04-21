@@ -25,14 +25,25 @@ import numpy as np
 import mfem.ser as mfem
 
 
-def run(order=1, meshfile='', use_pardiso=False):
+def get_full_assembly_level():
+    enum_type = getattr(mfem, 'AssemblyLevel', None)
+    if enum_type is not None and hasattr(enum_type, 'FULL'):
+        return enum_type.FULL
+    if hasattr(mfem, 'AssemblyLevel_FULL'):
+        return mfem.AssemblyLevel_FULL
+    raise AttributeError('FULL assembly level is not available in this PyMFEM build.')
+
+
+def run(order=1, meshfile='', use_pardiso=False, use_full_assembly=False,
+    refinement_levels=1):
     '''
     run ex0
     '''
 
-    #  2. Read the mesh from the given mesh file, and refine once uniformly.
+    #  2. Read the mesh from the given mesh file and refine uniformly.
     mesh = mfem.Mesh(meshfile, 1, 1)
-    mesh.UniformRefinement()
+    for _ in range(refinement_levels):
+        mesh.UniformRefinement()
 
     # 3. Define a finite element space on the mesh. Here we use H1 continuous
     #    high-order Lagrange finite elements of the given order.
@@ -60,6 +71,8 @@ def run(order=1, meshfile='', use_pardiso=False):
     # 7. Set up the bilinear form a(.,.) corresponding to the -Delta operator.
     a = mfem.BilinearForm(fespace)
     a.AddDomainIntegrator(mfem.DiffusionIntegrator(one))
+    if use_full_assembly:
+        a.SetAssemblyLevel(get_full_assembly_level())
     a.Assemble()
 
     # 8. Form the linear system A X = B. This includes eliminating boundary
@@ -74,10 +87,14 @@ def run(order=1, meshfile='', use_pardiso=False):
     if use_pardiso:
         # Requires MFEM built with MFEM_USE_MKL_PARDISO=YES (-C"with-mkl-pardiso=Yes")
         from mfem._ser.pardiso import PardisoSolver
+        import time
+        t_start = time.time()
         solver = PardisoSolver()
-        solver.SetPrintLevel(1)
+        solver.SetPrintLevel(0)
         solver.SetOperator(A)
         solver.Mult(B, X)
+        elapsed = time.time() - t_start
+        print(f"PardisoSolver elapsed time: {elapsed:.6f} seconds")
     else:
         # Default: PCG with symmetric Gauss-Seidel preconditioner.
         M = mfem.GSSmoother(A)
@@ -101,9 +118,15 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--order',
                         action='store', default=1, type=int,
                         help="Finite element order (polynomial degree) or -1 for isoparametric space.")
+    parser.add_argument('-r', '--refinement-levels',
+                        action='store', default=1, type=int,
+                        help='Number of uniform mesh refinement levels.')
     parser.add_argument('--use-pardiso',
                         action='store_true', default=False,
                         help='Use Intel MKL Pardiso direct solver (requires MFEM_USE_MKL_PARDISO).')
+    parser.add_argument('--full-assembly',
+                        action='store_true', default=True,
+                        help='Use MFEM FULL assembly before forming the sparse linear system.')
 
     args = parser.parse_args()
     parser.print_options(args)
@@ -114,4 +137,6 @@ if __name__ == "__main__":
 
     run(order=order,
         meshfile=meshfile,
-        use_pardiso=args.use_pardiso)
+        use_pardiso=args.use_pardiso,
+        use_full_assembly=args.full_assembly,
+        refinement_levels=args.refinement_levels)

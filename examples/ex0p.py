@@ -29,15 +29,32 @@ myid = MPI.COMM_WORLD.rank
 smyid = '{:0>6d}'.format(myid)
 
 
-def run(order=1, meshfile='', visualization=False, use_mumps=False):
+def get_full_assembly_level():
+    enum_type = getattr(mfem, 'AssemblyLevel', None)
+    if enum_type is not None and hasattr(enum_type, 'FULL'):
+        return enum_type.FULL
+    if hasattr(mfem, 'AssemblyLevel_FULL'):
+        return mfem.AssemblyLevel_FULL
+    raise AttributeError('FULL assembly level is not available in this PyMFEM build.')
+
+
+def run(order=1, meshfile='', visualization=False, use_cpardiso=False,
+    use_mumps=False, use_full_assembly=False, refinement_levels=1):
     '''
     run ex0
     '''
 
-    #  2. Read the mesh from the given mesh file, and refine once uniformly.
+    #  2. Read the mesh from the given mesh file and refine uniformly.
     serial_mesh = mfem.Mesh(meshfile)
     mesh = mfem.ParMesh(MPI.COMM_WORLD, serial_mesh)
-    mesh.UniformRefinement()
+    for _ in range(refinement_levels):
+        mesh.UniformRefinement()
+
+    if use_cpardiso and use_full_assembly:
+        if myid == 0:
+            print('CPardiso with FULL assembly is disabled in this example; '
+                  'falling back to LEGACY assembly to avoid a PyMFEM/MFEM crash.')
+        use_full_assembly = False
 
     # 3. Define a finite element space on the mesh. Here we use H1 continuous
     #    high-order Lagrange finite elements of the given order.
@@ -67,6 +84,8 @@ def run(order=1, meshfile='', visualization=False, use_mumps=False):
     # 7. Set up the bilinear form a(.,.) corresponding to the -Delta operator.
     a = mfem.ParBilinearForm(fespace)
     a.AddDomainIntegrator(mfem.DiffusionIntegrator(one))
+    if use_full_assembly:
+        a.SetAssemblyLevel(get_full_assembly_level())
     a.Assemble()
 
     # 8. Form the linear system A X = B. This includes eliminating boundary
@@ -76,8 +95,26 @@ def run(order=1, meshfile='', visualization=False, use_mumps=False):
     X = mfem.Vector()
     a.FormLinearSystem(boundary_dofs, x, b, A, X, B)
 
-    # 9. Solve the system using PCG with symmetric Gauss-Seidel preconditioner.
-    if use_mumps:
+    # 9. Solve the system using CPardiso, MUMPS, or PCG with BoomerAMG.
+    if use_cpardiso:
+        try:
+            from mfem._par.cpardiso import CPardisoSolver
+            start_time = MPI.Wtime()
+            cpardiso = CPardisoSolver(MPI.COMM_WORLD)
+            cpardiso.SetMatrixType(CPardisoSolver.REAL_NONSYMMETRIC)
+            cpardiso.SetPrintLevel(1 if myid == 0 else 0)
+            cpardiso.SetOperator(A)
+            if myid == 0:
+                print('CPardiso is available, running with Cluster Pardiso direct solver')
+            cpardiso.Mult(B, X)
+            if myid == 0:
+                print('CPardiso solve completed in', MPI.Wtime() - start_time, 'seconds')
+        except Exception as e:
+            if myid == 0:
+                print('CPardiso not available, falling back to PCG+BoomerAMG:', e)
+            use_cpardiso = False
+
+    if use_mumps and not use_cpardiso:
         try:
             from mfem._par.mumps import MUMPSSolver
             start_time = MPI.Wtime()
@@ -95,7 +132,7 @@ def run(order=1, meshfile='', visualization=False, use_mumps=False):
                 print('MUMPS not available, falling back to PCG+BoomerAMG:', e)
             use_mumps = False
 
-    if not use_mumps:
+    if not use_cpardiso and not use_mumps:
         start_time = MPI.Wtime()
         M = mfem.HypreBoomerAMG(A)
         cg = mfem.CGSolver(MPI.COMM_WORLD)
@@ -132,12 +169,21 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--order',
                         action='store', default=1, type=int,
                         help="Finite element order (polynomial degree) or -1 for isoparametric space.")
+    parser.add_argument('-r', '--refinement-levels',
+                        action='store', default=1, type=int,
+                        help='Number of uniform mesh refinement levels.')
     parser.add_argument('-vis', '--visualization',
                         action='store_true',
                         help='Enable GLVis visualization')
+    parser.add_argument('--use-cpardiso',
+                        action='store_true', default=False,
+                        help='Use Intel MKL Cluster Pardiso direct solver instead of PCG+BoomerAMG.')
     parser.add_argument('-mumps', '--use-mumps',
                         action='store_true', default=False,
-                        help='Use MUMPS direct solver instead of PCG+BoomerAMG')
+                        help='Use MUMPS direct solver instead of PCG+BoomerAMG.')
+    parser.add_argument('--full-assembly',
+                        action='store_true', default=False,
+                        help='Use MFEM FULL assembly before forming the parallel linear system.')
 
     args = parser.parse_args()
     if myid == 0:
@@ -150,4 +196,7 @@ if __name__ == "__main__":
     run(order=order,
         meshfile=meshfile,
         visualization=args.visualization,
-        use_mumps=args.use_mumps)
+        use_cpardiso=args.use_cpardiso,
+        use_mumps=args.use_mumps,
+        use_full_assembly=args.full_assembly,
+        refinement_levels=args.refinement_levels)
