@@ -8,6 +8,8 @@
 #include <mpi.h>
 #include "config/config.hpp"
 #include "linalg/cpardiso.hpp"
+#include "linalg/hypre.hpp"
+#include "linalg/sparsemat.hpp"
 #include "numpy/arrayobject.h"
 #include "../common/pyoperator.hpp"
 %}
@@ -28,6 +30,7 @@ import_array1(-1);
 %import "vector.i"
 %import "operators.i"
 %import "densemat.i"
+%import "sparsemat.i"
 %import "hypre.i"
 %import "../common/exception.i"
 

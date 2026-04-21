@@ -39,7 +39,8 @@ def get_extensions():
                                  mfemserlnkdir, mfemstpl, numpyinc,
                                  cc_ser, cxx_ser,
                                  cxxstdflag, mfem_outside, build_miniapps,
-                                 add_cuda, add_libceed, add_suitesparse, add_gslibs,
+                                 add_cuda, add_libceed, add_mkl_pardiso,
+                                 add_suitesparse, add_gslibs,
                                  bdist_wheel_dir, mkllib)
 
         include_dirs = [mfemserbuilddir, mfemserincdir, mfemsrcdir, numpyinc,]
@@ -56,6 +57,7 @@ def get_extensions():
         mfemstpl = ''
         add_cuda = ''
         add_libceed = ''
+        add_mkl_pardiso = ''
         add_suitesparse = ''
         add_gslibs = ''
         cxxstdflag = '-std=c++17'
@@ -123,6 +125,8 @@ def get_extensions():
     if add_libceed == '1':
         from setup_local import libceedinc
         include_dirs.append(libceedinc)
+    if add_mkl_pardiso == '1':
+        modules.append("pardiso")
     if add_suitesparse == '1':
         from setup_local import suitesparseinc
         if suitesparseinc != "":

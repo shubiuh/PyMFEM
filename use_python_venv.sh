@@ -48,6 +48,8 @@ python -m pip install . \
   -C"with-mkl-cpardiso=Yes" \
   -C"with-suitesparse=Yes" \
   -C"mfem-branch=v48" \
+  -C"skip-ext=Yes" \
+  -C"skip-swig=Yes" \
   --verbose
 
 # PC

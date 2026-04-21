@@ -41,7 +41,8 @@ def get_extensions():
                                  hypreinc, metisinc, hyprelib, metis5lib,
                                  cc_par, cxx_par, cc_ser, cxx_ser,
                                  cxxstdflag, mfem_outside, build_miniapps,
-                                 add_pumi, add_mumps, add_cuda, add_libceed, add_strumpack,
+                                 add_pumi, add_mumps, add_cuda, add_libceed,
+                                 add_mkl_pardiso, add_mkl_cpardiso, add_strumpack,
                                  add_suitesparse, add_gslibp, bdist_wheel_dir, mkllib)
 
         include_dirs = [mfembuilddir, mfemincdir, mfemsrcdir,
@@ -61,6 +62,8 @@ def get_extensions():
         mfemptpl = ''
         add_cuda = ''
         add_libceed = ''
+        add_mkl_pardiso = ''
+        add_mkl_cpardiso = ''
         add_suitesparse = ''
         add_strumpack = ''
         add_pumi = ''
@@ -166,6 +169,12 @@ def get_extensions():
     if add_libceed == '1':
         from setup_local import libceedinc
         include_dirs.append(libceedinc)
+
+    if add_mkl_pardiso == '1':
+        modules.append("pardiso")
+
+    if add_mkl_cpardiso == '1':
+        modules.append("cpardiso")
 
     if add_suitesparse == '1':
         from setup_local import suitesparseinc

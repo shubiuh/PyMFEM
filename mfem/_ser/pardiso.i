@@ -7,6 +7,7 @@
 %{
 #include "config/config.hpp"
 #include "linalg/pardiso.hpp"
+#include "linalg/sparsemat.hpp"
 #include "numpy/arrayobject.h"
 #include "../common/pyoperator.hpp"
 %}

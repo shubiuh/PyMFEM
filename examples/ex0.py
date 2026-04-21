@@ -7,8 +7,9 @@
       python <arguments>
 
    Example of arguments:
-      ex1.py -m star.mesh
-      ex1.py -m fichera.mesh -o 2
+      ex0.py -m star.mesh
+      ex0.py -m fichera.mesh -o 2
+      ex0.py -m star.mesh --use-pardiso
 
    Description: This example code demonstrates the most basic usage of MFEM to
                 define a simple finite element discretization of the Laplace
@@ -24,7 +25,7 @@ import numpy as np
 import mfem.ser as mfem
 
 
-def run(order=1,  meshfile=''):
+def run(order=1, meshfile='', use_pardiso=False):
     '''
     run ex0
     '''
@@ -69,9 +70,18 @@ def run(order=1,  meshfile=''):
     a.FormLinearSystem(boundary_dofs, x, b, A, X, B)
     print("Size of linear system: " + str(A.Height()))
 
-    # 9. Solve the system using PCG with symmetric Gauss-Seidel preconditioner.
-    M = mfem.GSSmoother(A)
-    mfem.PCG(A, M, B, X, 1, 200, 1e-12, 0.0)
+    # 9. Solve the system.
+    if use_pardiso:
+        # Requires MFEM built with MFEM_USE_MKL_PARDISO=YES (-C"with-mkl-pardiso=Yes")
+        from mfem._ser.pardiso import PardisoSolver
+        solver = PardisoSolver()
+        solver.SetPrintLevel(1)
+        solver.SetOperator(A)
+        solver.Mult(B, X)
+    else:
+        # Default: PCG with symmetric Gauss-Seidel preconditioner.
+        M = mfem.GSSmoother(A)
+        mfem.PCG(A, M, B, X, 1, 200, 1e-12, 0.0)
 
     # 10. Recover the solution x as a grid function and save to file. The output
     #     can be viewed using GLVis as follows: "glvis -m mesh.mesh -g sol.gf"
@@ -83,7 +93,7 @@ def run(order=1,  meshfile=''):
 if __name__ == "__main__":
     from mfem.common.arg_parser import ArgParser
 
-    parser = ArgParser(description='Ex1 (Laplace Problem)')
+    parser = ArgParser(description='Ex0 (Laplace Problem)')
     parser.add_argument('-m', '--mesh',
                         default='star.mesh',
                         action='store', type=str,
@@ -91,6 +101,9 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--order',
                         action='store', default=1, type=int,
                         help="Finite element order (polynomial degree) or -1 for isoparametric space.")
+    parser.add_argument('--use-pardiso',
+                        action='store_true', default=False,
+                        help='Use Intel MKL Pardiso direct solver (requires MFEM_USE_MKL_PARDISO).')
 
     args = parser.parse_args()
     parser.print_options(args)
@@ -100,4 +113,5 @@ if __name__ == "__main__":
         join(os.path.dirname(__file__), '..', 'data', args.mesh))
 
     run(order=order,
-        meshfile=meshfile)
+        meshfile=meshfile,
+        use_pardiso=args.use_pardiso)
