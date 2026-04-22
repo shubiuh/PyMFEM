@@ -8,6 +8,11 @@ cd /volume/volume1/pymfem_cpu_dev/PyMFEM_dev
 python3 -m venv .venv
 . .venv/bin/activate
 
+# Make Intel MKL shared libraries visible to the dynamic linker.
+# The 'latest' symlink resolves to the installed version (e.g. 2025.3).
+MKL_LIB=/volume/volume1/pymfem_cpu_dev/PyMFEM_dev/external/intel/oneapi/mkl/latest/lib
+export LD_LIBRARY_PATH="${MKL_LIB}:${LD_LIBRARY_PATH:-}"
+
 # intel OneMKL silently
 # wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/6a17080f-f0de-41b9-b587-52f92512c59a/intel-onemkl-2025.3.1.11_offline.sh
 # sudo sh ./intel-onemkl-2025.3.1.11_offline.sh -a -s --install-dir /volume/volume1/pymfem_cpu_dev/PyMFEM_dev/external/intel/oneapi --eula accept
@@ -70,5 +75,11 @@ docker run --rm -it \
 
 export LD_LIBRARY_PATH=/docker_ws/PyMFEM_dev/external/intel/oneapi/mkl/2025.3/lib:$LD_LIBRARY_PATH
 
-mpirun --allow-run-as-root -np 16 python3 ex0p.py \
-  --use-cpardiso --full-assembly -r 2 -o 3 -m inline-hex.mesh
+# use cluster pardiso (real-valued)
+mpirun --allow-run-as-root -np 16 python3 ex0p.py --use-cpardiso --full-assembly -r 2 -o 3 -m inline-hex.mesh
+
+# us real mumps
+mpirun --allow-run-as-root -n 4 python3 ex0p.py -mumps -o 2 -r 3  -m inline-hex.mesh
+
+# use complex mumps
+mpirun --allow-run-as-root -n 4 python3 ex0p.py -cmumps -o 2 -r 3  -m inline-hex.mesh
