@@ -50,7 +50,8 @@ def run(meshfile="",
         visualization=1,
         herm_conv=True,
         device_config='cpu',
-        pa=False):
+        pa=False,
+        use_complex_mumps=False):
 
     # 2. Enable hardware devices such as GPUs, and programming models such as
     #    CUDA, OCCA, RAJA and OpenMP based on command line options.
@@ -283,6 +284,34 @@ def run(meshfile="",
     X = mfem.Vector()
     a.FormLinearSystem(ess_tdof_list, x, b, A, X, B)
 
+    # 14. Solve with ComplexMUMPS or the GMRES+AMS preconditioner.
+    #
+    # ComplexMUMPS path: extract the assembled ComplexHypreParMatrix from the
+    # OperatorPtr A and pass it directly to ComplexMUMPSSolver.  This avoids
+    # the 2x2 block expansion used by the real MUMPSSolver and solves the
+    # native complex system using ZMUMPS/CMUMPS.
+    if use_complex_mumps and not pa:
+        try:
+            from mfem._par.mumps import ComplexMUMPSSolver
+            if not A.IsComplexHypreParMatrix():
+                print0("ComplexMUMPS: operator is not a ComplexHypreParMatrix; "
+                       "falling back to GMRES.")
+                use_complex_mumps = False
+            else:
+                Ah = A.AsComplexHypreParMatrix()
+                start_time = MPI.Wtime()
+                csolver = ComplexMUMPSSolver(MPI.COMM_WORLD)
+                csolver.SetMatrixSymType(ComplexMUMPSSolver.UNSYMMETRIC)
+                csolver.SetPrintLevel(1 if myid == 0 else 0)
+                csolver.SetOperator(Ah)
+                print0("Solving with ComplexMUMPS direct solver...")
+                csolver.Mult(B, X)
+                print0("ComplexMUMPS solve completed in",
+                       MPI.Wtime() - start_time, "seconds")
+        except Exception as e:
+            print0("ComplexMUMPS not available, falling back to GMRES:", e)
+            use_complex_mumps = False
+
     # 14a. Set up the Bilinear form a(.,.) for the preconditioner
     #
     #    In Comp
@@ -292,7 +321,7 @@ def run(meshfile="",
     #              + omega^2 * epsilon (abs(det(J) * (J^T J)^-1) * E, F)
 
     umf_solver = False
-    if pa or not umf_solver:
+    if not use_complex_mumps and (pa or not umf_solver):
         absomeg = mfem.ConstantCoefficient(omega**2 * epsilon)
         restr_absomeg = mfem.RestrictedCoefficient(absomeg, attr)
 
@@ -362,8 +391,15 @@ def run(meshfile="",
 
     # If exact is known compute the error
     if exact_known:
+        maxwell_params = {"comp_domain_bdr": comp_domain_bdr,
+                          "dim": dim,
+                          "omega": omega,
+                          "epsilon": epsilon,
+                          "prob": prob,
+                          "mu": mu}
         E_ex = mfem.jit.vector(shape=(dim,),
-                               complex=True)(maxwell_solution)
+                               complex=True,
+                               params=maxwell_params)(maxwell_solution)
         E_ex_Re = E_ex.real
         E_ex_Im = E_ex.imag
 
@@ -764,6 +800,10 @@ if __name__ == "__main__":
     parser.add_argument("-pa", "--partial-assembly",
                         action='store_true',
                         help="Enable Partial Assembly.")
+    parser.add_argument("-cmumps", "--use-complex-mumps",
+                        action='store_true', default=False,
+                        help="Use ComplexMUMPS direct solver instead of GMRES "
+                             "(requires libzmumps/libcmumps, incompatible with -pa).")
     parser.add_argument("-d", "--device",
                         default="cpu", type=str,
                         help="Device configuration string, see Device::Configure().")
@@ -784,4 +824,5 @@ if __name__ == "__main__":
         visualization=args.visualization,
         herm_conv=args.no_hermitian,
         device_config=args.device,
-        pa=args.partial_assembly)
+        pa=args.partial_assembly,
+        use_complex_mumps=args.use_complex_mumps)
