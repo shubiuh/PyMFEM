@@ -197,27 +197,43 @@ def assemble_dipole_rhs(rhs, fespace, source):
     if global_found == 0:
         raise ValueError('Dipole position lies outside the mesh.')
 
-    if element_id is None:
-        return {'mode': 'off-rank', 'local_elements': []}
-
+    # Determine vertex tolerance (needed before the mode branch so all ranks
+    # can participate in the vertex-path collective calls below).
     bbox_min, bbox_max = mesh.GetBoundingBox()
     mesh_scale = max(np.linalg.norm(np.array(bbox_max) - np.array(bbox_min)), 1.0)
     vertex_tol = max(source.vertex_tol, 1e-12 * mesh_scale)
-    vertex_id = _find_matching_vertex(mesh, fespace, element_id, source.dipole_pos, vertex_tol)
 
-    if vertex_id is None:
-        _add_dipole_to_element(rhs, fespace, element_id,
-                               source.dipole_pos, source.dipole_moment, 1.0)
-        return {'mode': 'element', 'local_elements': [element_id]}
+    # Determine local mode (off-rank ranks contribute nothing).
+    vertex_id = None
+    if element_id is not None:
+        vertex_id = _find_matching_vertex(mesh, fespace, element_id,
+                                          source.dipole_pos, vertex_tol)
 
+    # Communicate whether any rank found a vertex match so all ranks agree
+    # on which collective path to take.
+    local_is_vertex = 1 if vertex_id is not None else 0
+    global_is_vertex = MPI.COMM_WORLD.allreduce(local_is_vertex, op=MPI.SUM)
+
+    if global_is_vertex == 0:
+        # Interior-element path: no further collectives needed.
+        if element_id is not None:
+            _add_dipole_to_element(rhs, fespace, element_id,
+                                   source.dipole_pos, source.dipole_moment, 1.0)
+            return {'mode': 'element', 'local_elements': [element_id]}
+        return {'mode': 'off-rank', 'local_elements': []}
+
+    # Vertex path: ALL ranks must participate in the two allreduce calls below,
+    # even those that don't own any element incident to the vertex (they
+    # contribute zeros).
     local_elements = []
     local_raw_weights = []
-    for connected_element in _get_incident_elements(mesh, vertex_id):
-        if vertex_id in _get_element_vertices(fespace, connected_element):
-            local_elements.append(int(connected_element))
-            local_raw_weights.append(
-                _vertex_corner_measure(mesh, fespace, connected_element,
-                                       vertex_id, source.dipole_pos, vertex_tol))
+    if vertex_id is not None:
+        for connected_element in _get_incident_elements(mesh, vertex_id):
+            if vertex_id in _get_element_vertices(fespace, connected_element):
+                local_elements.append(int(connected_element))
+                local_raw_weights.append(
+                    _vertex_corner_measure(mesh, fespace, connected_element,
+                                           vertex_id, source.dipole_pos, vertex_tol))
 
     local_weight_sum = float(sum(local_raw_weights))
     global_weight_sum = MPI.COMM_WORLD.allreduce(local_weight_sum, op=MPI.SUM)
@@ -601,6 +617,8 @@ def run(order=1,
         a.Assemble()
         pc_op.Assemble()
 
+        # if myid == 0:
+        print('Assembling A...')
         A = mfem.OperatorHandle()
         B = mfem.Vector()
         X = mfem.Vector()
@@ -610,7 +628,8 @@ def run(order=1,
         AA = pc_handle.AsHypreParMatrix()
 
         if myid == 0:
-            print(f'System size: {A.Height()}')
+            print(f'Local system size on rank 0: {A.Height()} (= 2 x {A.Height()//2} local DOFs)')
+            print(f'Global system size: {2 * fespace.GlobalTrueVSize()}')
 
         active_solver = 'fgmres'
 
@@ -623,11 +642,23 @@ def run(order=1,
                         print('ComplexMUMPS: operator is not a ComplexHypreParMatrix; '
                               'falling back.')
                 else:
+                    t_ah = MPI.Wtime()
                     Ah = A.AsComplexHypreParMatrix()
+                    if myid == 0:
+                        print(f'AsComplexHypreParMatrix completed in {MPI.Wtime() - t_ah:.4f} s')
                     t0 = MPI.Wtime()
                     csolver = ComplexMUMPSSolver(MPI.COMM_WORLD)
                     csolver.SetMatrixSymType(ComplexMUMPSSolver.UNSYMMETRIC)
                     csolver.SetPrintLevel(1 if myid == 0 else 0)
+                    csolver.SetMemRelaxation(40)
+                    # csolver.SetNumThreads(4) 
+                    # csolver.SetPivotThreshold(0.01)
+                    # csolver.SetOutOfCore(0)
+                    # csolver.SetBLRMode(2)          # ICNTL(35)=2: fact + solution in low-rank
+                    # csolver.SetBLRTol(1e-3)        # CNTL(7): approximation tolerance
+                    # csolver.SetBLRCompressionType(0)  # ICNTL(36)=1: UCFS
+                    # csolver.SetBLRCBCompression(1)    # ICNTL(37)=1: compress contribution blocks
+                    # csolver.SetReorderingReuse(True)
                     csolver.SetOperator(Ah)
                     if myid == 0:
                         print('Solving with ComplexMUMPS...')
@@ -860,7 +891,6 @@ if __name__ == '__main__':
 
     if myid == 0:
         parser.print_options(args)
-        print(args.max_amr_iterations)
     
     meshfile = expanduser(join(os.path.dirname(__file__), '..', 'data', args.mesh))
     element_sigma_map = parse_element_sigma_map(args.element_sigma)
