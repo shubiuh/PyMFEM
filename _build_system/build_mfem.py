@@ -129,7 +129,9 @@ def cmake_make_mfem(serial=True):
                 cmake_opts['DScaLAPACK_DIR'] = scalapack_cmake_dir
                 cmake_opts['Dscalapack_DIR'] = scalapack_cmake_dir
             
-            # Find MUMPS library path (try dmumps first, then smumps)
+            # Find MUMPS library path (try dmumps first, then smumps).
+            # The same directory also contains zmumps/cmumps for complex solves,
+            # so a single rpath entry covers all MUMPS precision variants.
             try:
                 libpath = os.path.dirname(
                     find_libpath_from_prefix("dmumps", bglb.mumps_prefix))
@@ -137,6 +139,19 @@ def cmake_make_mfem(serial=True):
                 libpath = os.path.dirname(
                     find_libpath_from_prefix("smumps", bglb.mumps_prefix))
             add_rpath(libpath, ex_loc)
+            # Verify that the complex counterpart (zmumps/cmumps) is also
+            # present and warn loudly if it is missing, because
+            # ComplexMUMPSSolver will fail to link without it.
+            _complex_lib = "zmumps" if "dmumps" in libpath else "cmumps"
+            try:
+                find_libpath_from_prefix(_complex_lib, bglb.mumps_prefix)
+            except Exception:
+                print("WARNING: %s not found in %s. "
+                      "ComplexMUMPSSolver requires the complex MUMPS "
+                      "precision library (%s). "
+                      "Rebuild MUMPS with arithmetic=z (or =c for single)"
+                      " to enable complex direct solves."
+                      % (_complex_lib, bglb.mumps_prefix, _complex_lib))
             
             # MUMPS requires LAPACK, so ensure it's enabled
             if not bglb.enable_lapack:

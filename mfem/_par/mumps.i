@@ -28,6 +28,16 @@ import_array1(-1);
 %import "vector.i"
 %import "operators.i"
 %import "hypre.i"
+%import "complex_operator.i"
 %import "../common/exception.i"
+
+// Suppress the ComplexMumpsScalar typedef and the helper macros – SWIG
+// does not need to expose the internal scalar alias or the #define helpers.
+#ifdef MFEM_USE_COMPLEX_MUMPS
+%ignore ComplexMumpsSet;
+%ignore ComplexMumpsReal;
+%ignore ComplexMumpsImag;
+%ignore mfem::ComplexMumpsScalar;
+#endif
 
 %include "linalg/mumps.hpp"
