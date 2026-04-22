@@ -37,6 +37,8 @@
         mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole_amr.py -sigma 0.05
         mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole_amr.py -es 0:1.0,5:4.0,8:8.0
         mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole_amr.py -mumps -pv -vis
+        mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole_amr.py -cmumps
+        mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole_amr.py -pardiso
 '''
 import os
 import sys
@@ -449,6 +451,8 @@ def run(order=1,
         visualization=False,
         freq=1.0,
         use_mumps=False,
+        use_complex_mumps=False,
+        use_pardiso=False,
         paraview_output=False):
     """
     Run the AMR Maxwell solver with dipole source and conductivity.
@@ -564,7 +568,7 @@ def run(order=1,
             print(f'  attr {attr}: sigma = {sigma_by_attr[attr]}')
         if sigma_values.Size() > 0:
             print(f'Max conductivity: {max(sigma_values[i] for i in range(sigma_values.Size())):.6e}')
-    sys.exit()
+    # sys.exit()
     if visualization:
         sol_sock_real = mfem.socketstream('localhost', 19916)
         sol_sock_imag = mfem.socketstream('localhost', 19916)
@@ -608,22 +612,73 @@ def run(order=1,
         if myid == 0:
             print(f'System size: {A.Height()}')
 
-        solved_with_mumps = False
-        if use_mumps:
+        active_solver = 'fgmres'
+
+        # --- ComplexMUMPS: native complex ZMUMPS solver ---
+        if use_complex_mumps and active_solver == 'fgmres':
+            try:
+                from mfem._par.mumps import ComplexMUMPSSolver
+                if not A.IsComplexHypreParMatrix():
+                    if myid == 0:
+                        print('ComplexMUMPS: operator is not a ComplexHypreParMatrix; '
+                              'falling back.')
+                else:
+                    Ah = A.AsComplexHypreParMatrix()
+                    t0 = MPI.Wtime()
+                    csolver = ComplexMUMPSSolver(MPI.COMM_WORLD)
+                    csolver.SetMatrixSymType(ComplexMUMPSSolver.UNSYMMETRIC)
+                    csolver.SetPrintLevel(1 if myid == 0 else 0)
+                    csolver.SetOperator(Ah)
+                    if myid == 0:
+                        print('Solving with ComplexMUMPS...')
+                    csolver.Mult(B, X)
+                    if myid == 0:
+                        print(f'ComplexMUMPS solve completed in {MPI.Wtime() - t0:.4f} s')
+                    active_solver = 'complex_mumps'
+            except Exception as exc:
+                if myid == 0:
+                    print(f'ComplexMUMPS not available, falling back: {exc}')
+
+        # --- Real MUMPS: 2x2 block-expanded real system ---
+        if use_mumps and active_solver == 'fgmres':
             try:
                 from mfem._par.mumps import MUMPSSolver
-
+                t0 = MPI.Wtime()
                 mumps = MUMPSSolver(MPI.COMM_WORLD)
                 mumps.SetMatrixSymType(MUMPSSolver.UNSYMMETRIC)
                 mumps.SetPrintLevel(1 if myid == 0 else 0)
                 mumps.SetOperator(A.Ptr())
-                mumps.Mult(B, X)
-                solved_with_mumps = True
-            except Exception:
                 if myid == 0:
-                    print('MUMPS not available for this complex system, falling back to FGMRES.')
+                    print('Solving with MUMPS (real 2x2 block)...')
+                mumps.Mult(B, X)
+                if myid == 0:
+                    print(f'MUMPS solve completed in {MPI.Wtime() - t0:.4f} s')
+                active_solver = 'mumps'
+            except Exception as exc:
+                if myid == 0:
+                    print(f'MUMPS not available, falling back: {exc}')
 
-        if not solved_with_mumps:
+        # --- Real Pardiso: Intel MKL Pardiso on 2x2 block-expanded real system ---
+        if use_pardiso and active_solver == 'fgmres':
+            try:
+                from mfem._par.pardiso import PardisoSolver
+                t0 = MPI.Wtime()
+                pardiso = PardisoSolver()
+                pardiso.SetMatrixType(PardisoSolver.REAL_NONSYMMETRIC)
+                pardiso.SetPrintLevel(0)
+                pardiso.SetOperator(A.Ptr())
+                if myid == 0:
+                    print('Solving with Pardiso (real 2x2 block)...')
+                pardiso.Mult(B, X)
+                if myid == 0:
+                    print(f'Pardiso solve completed in {MPI.Wtime() - t0:.4f} s')
+                active_solver = 'pardiso'
+            except Exception as exc:
+                if myid == 0:
+                    print(f'Pardiso not available, falling back: {exc}')
+
+        # --- FGMRES + AMS block diagonal preconditioner (default) ---
+        if active_solver == 'fgmres':
             block_true_offsets = mfem.intArray()
             block_true_offsets.SetSize(3)
             block_true_offsets[0] = 0
@@ -790,7 +845,13 @@ if __name__ == '__main__':
                         help='Enable GLVis visualization.')
     parser.add_argument('-mumps', '--use-mumps',
                         action='store_true',
-                        help='Use the MUMPS direct solver when available.')
+                        help='Use the real MUMPS direct solver (2x2 block-expanded system).')
+    parser.add_argument('-cmumps', '--use-complex-mumps',
+                        action='store_true',
+                        help='Use ComplexMUMPS (ZMUMPS) direct solver on the native complex system.')
+    parser.add_argument('-pardiso', '--use-pardiso',
+                        action='store_true',
+                        help='Use Intel MKL Pardiso direct solver (2x2 block-expanded real system, requires MFEM_USE_MKL_PARDISO).')
     parser.add_argument('-pv', '--paraview',
                         action='store_true',
                         help='Export the AMR states to ParaView/VTK.')
@@ -823,4 +884,6 @@ if __name__ == '__main__':
         visualization=args.visualization,
         freq=args.frequency,
         use_mumps=args.use_mumps,
+        use_complex_mumps=args.use_complex_mumps,
+        use_pardiso=args.use_pardiso,
         paraview_output=args.paraview)

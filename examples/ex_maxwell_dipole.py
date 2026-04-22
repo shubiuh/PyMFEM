@@ -27,6 +27,8 @@
       mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole.py -m fichera.mesh -o 2
       mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole.py -vis -k 2.0
       mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole.py -mumps -pv
+      mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole.py -cmumps
+      mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole.py -cpardiso
       mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole.py -o 2 -k 1.5 -pv -vis
 '''
 import os
@@ -74,7 +76,7 @@ class DipoleSource(mfem.VectorPyCoefficient):
             v[i] = envelope * self.dipole_moment[i]
 
 
-def run(order=1, 
+def run(order=1,
         meshfile='',
         rs=2,
         rp=0,
@@ -82,6 +84,8 @@ def run(order=1,
         visualization=False,
         freq=1.0,
         use_mumps=False,
+        use_complex_mumps=False,
+        use_cpardiso=False,
         paraview_output=False):
     '''
     Run the indefinite Maxwell solver with dipole source
@@ -207,38 +211,92 @@ def run(order=1,
     if myid == 0:
         print(f'System size: {A.Height()}')
         print('Solving linear system...')
-        if use_mumps:
-            print('Using MUMPS direct solver')
-        else:
-            print('Using GMRES with AMS preconditioner')
-    
+
     # 11. Solve the linear system
     AA = A.AsHypreParMatrix()
-    
-    if use_mumps:
-        # Use MUMPS direct solver for indefinite systems
+
+    active_solver = 'gmres'
+
+    # --- ComplexMUMPS: native complex ZMUMPS direct solver ---
+    # The real (curl curl - k^2 + loss) form is the real operator; a tiny
+    # imaginary VectorFEMassIntegrator is added to form a ComplexHypreParMatrix
+    # so the full ZMUMPS code path is exercised.
+    if use_complex_mumps and active_solver == 'gmres':
+        try:
+            from mfem._par.mumps import ComplexMUMPSSolver
+            from mfem._par.complex_operator import ComplexHypreParMatrix, ComplexOperator
+            eps_imag = 1e-4 * wavenumber**2
+            a_i = mfem.ParBilinearForm(fespace)
+            a_i.AddDomainIntegrator(
+                mfem.VectorFEMassIntegrator(mfem.ConstantCoefficient(eps_imag)))
+            a_i.Assemble()
+            E_imag_gf = mfem.ParGridFunction(fespace)
+            E_imag_gf.Assign(0.0)
+            AA_i = mfem.HypreParMatrix()
+            X_i = mfem.Vector()
+            B_i_dummy = mfem.Vector()
+            a_i.FormLinearSystem(ess_tdof_list, E_imag_gf, b_real, AA_i, X_i, B_i_dummy)
+            op_c = ComplexHypreParMatrix(
+                AA, AA_i, False, False, ComplexOperator.BLOCK_SYMMETRIC)
+            B_imag = mfem.Vector(B.Size())
+            B_imag.Assign(0.0)
+            t0 = MPI.Wtime()
+            csolver = ComplexMUMPSSolver(MPI.COMM_WORLD)
+            csolver.SetMatrixSymType(ComplexMUMPSSolver.UNSYMMETRIC)
+            csolver.SetPrintLevel(1 if myid == 0 else 0)
+            csolver.SetOperator(op_c)
+            if myid == 0:
+                print('Solving with ComplexMUMPS (ZMUMPS)...')
+            csolver.Mult(B, B_imag, X, X_i)
+            if myid == 0:
+                print(f'ComplexMUMPS solve completed in {MPI.Wtime() - t0:.4f} s')
+            active_solver = 'complex_mumps'
+        except Exception as exc:
+            if myid == 0:
+                print(f'ComplexMUMPS not available, falling back: {exc}')
+
+    # --- Cluster Pardiso: Intel MKL distributed direct solver ---
+    if use_cpardiso and active_solver == 'gmres':
+        try:
+            from mfem._par.cpardiso import CPardisoSolver
+            t0 = MPI.Wtime()
+            cpardiso = CPardisoSolver(MPI.COMM_WORLD)
+            cpardiso.SetMatrixType(CPardisoSolver.REAL_NONSYMMETRIC)
+            cpardiso.SetPrintLevel(1 if myid == 0 else 0)
+            cpardiso.SetOperator(AA)
+            if myid == 0:
+                print('Solving with Cluster Pardiso (Intel MKL)...')
+            cpardiso.Mult(B, X)
+            if myid == 0:
+                print(f'Cluster Pardiso solve completed in {MPI.Wtime() - t0:.4f} s')
+            active_solver = 'cpardiso'
+        except Exception as exc:
+            if myid == 0:
+                print(f'Cluster Pardiso not available, falling back: {exc}')
+
+    # --- MUMPS: real direct solver ---
+    if use_mumps and active_solver == 'gmres':
         try:
             from mfem._par.mumps import MUMPSSolver
+            t0 = MPI.Wtime()
             mumps = MUMPSSolver(MPI.COMM_WORLD)
             mumps.SetMatrixSymType(MUMPSSolver.UNSYMMETRIC)
             mumps.SetPrintLevel(1 if myid == 0 else 0)
             mumps.SetOperator(AA)
+            if myid == 0:
+                print('Solving with MUMPS...')
             mumps.Mult(B, X)
-            
             if myid == 0:
-                print('MUMPS solver completed')
-        except:
+                print(f'MUMPS solve completed in {MPI.Wtime() - t0:.4f} s')
+            active_solver = 'mumps'
+        except Exception as exc:
             if myid == 0:
-                print('MUMPS not available, falling back to GMRES')
-            use_mumps = False
-    
-    if not use_mumps:
-        # Use GMRES with AMS preconditioner
-        # AMS (Auxiliary-space Maxwell Solver) is designed for curl-curl systems
+                print(f'MUMPS not available, falling back: {exc}')
+
+    # --- GMRES + AMS block preconditioner (default) ---
+    if active_solver == 'gmres':
         ams = mfem.HypreAMS(AA, fespace)
         ams.SetPrintLevel(0)
-        
-        # Use GMRES for the indefinite system
         gmres = mfem.GMRESSolver(MPI.COMM_WORLD)
         gmres.SetPrintLevel(1)
         gmres.SetKDim(100)
@@ -247,14 +305,11 @@ def run(order=1,
         gmres.SetAbsTol(1e-10)
         gmres.SetOperator(AA)
         gmres.SetPreconditioner(ams)
-        
         gmres.Mult(B, X)
-        
-        if gmres.GetConverged():
-            if myid == 0:
+        if myid == 0:
+            if gmres.GetConverged():
                 print(f'GMRES converged in {gmres.GetNumIterations()} iterations')
-        else:
-            if myid == 0:
+            else:
                 print('GMRES did not converge')
     
     # 12. Recover the solution
@@ -344,7 +399,13 @@ if __name__ == "__main__":
                         help='Enable GLVis visualization')
     parser.add_argument('-mumps', '--use-mumps',
                         action='store_true',
-                        help='Use MUMPS direct solver instead of GMRES')
+                        help='Use real MUMPS direct solver instead of GMRES.')
+    parser.add_argument('-cmumps', '--use-complex-mumps',
+                        action='store_true',
+                        help='Use ComplexMUMPS (ZMUMPS) direct solver (requires libzmumps/libcmumps).')
+    parser.add_argument('-cpardiso', '--use-cpardiso',
+                        action='store_true',
+                        help='Use Intel MKL Cluster Pardiso direct solver (requires MFEM_USE_MKL_CPARDISO).')
     parser.add_argument('-pv', '--paraview',
                         action='store_true',
                         help='Export solution to ParaView/VTK format')
@@ -364,4 +425,6 @@ if __name__ == "__main__":
         visualization=args.visualization,
         freq=args.frequency,
         use_mumps=args.use_mumps,
+        use_complex_mumps=args.use_complex_mumps,
+        use_cpardiso=args.use_cpardiso,
         paraview_output=args.paraview)
