@@ -85,3 +85,6 @@ mpirun --allow-run-as-root -n 4 python3 ex0p.py -mumps -o 2 -r 3  -m inline-hex.
 
 # use complex mumps
 mpirun --allow-run-as-root -n 4 python3 ex0p.py -cmumps -o 2 -r 3  -m inline-hex.mesh
+
+# use complex mumps with paraview visualization and glvis visualization, and amr
+mpirun --allow-run-as-root -n 4 python ex_maxwell_dipole_amr.py -cmumps -vis -amr 4 -o 2 -pv

@@ -135,14 +135,39 @@ def cmake_make_mumps():
             cmake_opts['DMETIS_LIBRARY'] = metis_lib
             cmake_opts['DMETIS_INCLUDE_DIR'] = metis_inc
 
-            # Enable ParMETIS if prefix is set and library is present
-            parmetis_lib = _find_lib("parmetis", [
-                os.path.join(bglb.parmetis_prefix, "lib"),
-                os.path.join(bglb.parmetis_prefix, "lib64"),
-            ]) if bglb.parmetis_prefix != '' else None
+            # Enable ParMETIS if prefix is set and library is present.
+            # ParMETIS is often built in-source (no install step), so search
+            # the build-tree subdirectory as well as the standard lib/ layout.
+            parmetis_lib = None
+            if bglb.parmetis_prefix != '':
+                parmetis_lib = _find_lib("parmetis", [
+                    os.path.join(bglb.parmetis_prefix, "lib"),
+                    os.path.join(bglb.parmetis_prefix, "lib64"),
+                    os.path.join(bglb.parmetis_prefix, "cmbuild", "libparmetis"),
+                    bglb.parmetis_prefix,
+                ])
             if parmetis_lib:
                 cmake_opts['DMUMPS_parmetis'] = 'ON'
                 cmake_opts['DPARMETIS_LIBRARY'] = parmetis_lib
+
+                # FindMETIS.cmake also requires METIS_LIBRARY when ParMETIS
+                # is requested.  ParMETIS bundles its own METIS; find it in
+                # the same build tree before falling back to the standalone one.
+                metis_in_parmetis = _find_lib("metis", [
+                    os.path.join(bglb.parmetis_prefix, "lib"),
+                    os.path.join(bglb.parmetis_prefix, "lib64"),
+                    os.path.join(bglb.parmetis_prefix, "cmbuild", "libmetis"),
+                    bglb.parmetis_prefix,
+                ])
+                if metis_in_parmetis:
+                    cmake_opts['DMETIS_LIBRARY'] = metis_in_parmetis
+
+                # FindMETIS.cmake searches for parmetis.h (not metis.h) when
+                # the ParMETIS component is requested.  Override METIS_INCLUDE_DIR
+                # to the directory that actually contains parmetis.h.
+                parmetis_inc = os.path.join(bglb.parmetis_prefix, "include")
+                if os.path.exists(os.path.join(parmetis_inc, "parmetis.h")):
+                    cmake_opts['DMETIS_INCLUDE_DIR'] = parmetis_inc
             else:
                 cmake_opts['DMUMPS_parmetis'] = 'OFF'
         else:

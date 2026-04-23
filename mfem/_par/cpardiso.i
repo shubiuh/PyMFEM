@@ -9,6 +9,7 @@
 #include "config/config.hpp"
 #include "linalg/cpardiso.hpp"
 #include "linalg/hypre.hpp"
+#include "linalg/complex_operator.hpp"
 #include "linalg/sparsemat.hpp"
 #include "numpy/arrayobject.h"
 #include "../common/pyoperator.hpp"
@@ -32,6 +33,7 @@ import_array1(-1);
 %import "densemat.i"
 %import "sparsemat.i"
 %import "hypre.i"
+%import "complex_operator.i"
 %import "../common/exception.i"
 
 %include "linalg/cpardiso.hpp"

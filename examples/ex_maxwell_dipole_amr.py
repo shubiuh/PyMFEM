@@ -617,8 +617,6 @@ def run(order=1,
         a.Assemble()
         pc_op.Assemble()
 
-        # if myid == 0:
-        print('Assembling A...')
         A = mfem.OperatorHandle()
         B = mfem.Vector()
         X = mfem.Vector()
@@ -626,10 +624,10 @@ def run(order=1,
         pc_handle = mfem.OperatorHandle()
         pc_op.FormSystemMatrix(ess_tdof_list, pc_handle)
         AA = pc_handle.AsHypreParMatrix()
-
+        global_dofs = fespace.GlobalTrueVSize()
         if myid == 0:
             print(f'Local system size on rank 0: {A.Height()} (= 2 x {A.Height()//2} local DOFs)')
-            print(f'Global system size: {2 * fespace.GlobalTrueVSize()}')
+            print(f'Global system size: {fespace.GlobalTrueVSize()}')
 
         active_solver = 'fgmres'
 
@@ -644,21 +642,29 @@ def run(order=1,
                 else:
                     t_ah = MPI.Wtime()
                     Ah = A.AsComplexHypreParMatrix()
-                    if myid == 0:
-                        print(f'AsComplexHypreParMatrix completed in {MPI.Wtime() - t_ah:.4f} s')
                     t0 = MPI.Wtime()
                     csolver = ComplexMUMPSSolver(MPI.COMM_WORLD)
                     csolver.SetMatrixSymType(ComplexMUMPSSolver.UNSYMMETRIC)
+                    csolver.SetMemRelaxation(100)
                     csolver.SetPrintLevel(1 if myid == 0 else 0)
-                    csolver.SetMemRelaxation(40)
-                    # csolver.SetNumThreads(4) 
-                    # csolver.SetPivotThreshold(0.01)
-                    # csolver.SetOutOfCore(0)
-                    # csolver.SetBLRMode(2)          # ICNTL(35)=2: fact + solution in low-rank
-                    # csolver.SetBLRTol(1e-3)        # CNTL(7): approximation tolerance
-                    # csolver.SetBLRCompressionType(0)  # ICNTL(36)=1: UCFS
-                    # csolver.SetBLRCBCompression(1)    # ICNTL(37)=1: compress contribution blocks
-                    # csolver.SetReorderingReuse(True)
+                    if global_dofs> 1000000:
+                        # ICNTL(14): large value avoids MUMPS -8/-9 retry-realloc loop
+                        # (incremental memory growth). 200 = allocate 2x the estimate upfront.
+                        csolver.SetMemRelaxation(200)
+                        # ParMETIS gives 3-5x better fill reduction than AMD for 3D H(curl)
+                        csolver.SetReorderingStrategy(ComplexMUMPSSolver.PARMETIS)
+                        # BLR: reduces memory and factor time for large problems.
+                        # Mode 2 = BLR in both factorization and solution phases.
+                        # Tol 1e-4 balances accuracy vs. compression; tighten if solution
+                        # accuracy degrades.
+                        csolver.SetBLRMode(2)
+                        csolver.SetBLRTol(1e-4)
+                        csolver.SetBLRCompressionType(1)   # ICNTL(36)=1: UCFS (lower memory)
+                        csolver.SetBLRCBCompression(0)     # ICNTL(37)=1: compress contribution blocks
+                        # csolver.SetNumThreads(4)
+                        # csolver.SetPivotThreshold(0.01)
+                        # csolver.SetOutOfCore(0)
+                        # csolver.SetReorderingReuse(True)
                     csolver.SetOperator(Ah)
                     if myid == 0:
                         print('Solving with ComplexMUMPS...')
