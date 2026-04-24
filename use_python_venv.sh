@@ -52,6 +52,7 @@ python -m pip install . \
   -C"with-mkl-pardiso=Yes" \
   -C"with-mkl-cpardiso=Yes" \
   -C"with-suitesparse=Yes" \
+  -C"with-hdf5=Yes" \
   -C"mfem-branch=v48" \
   -C"skip-ext=No" \
   -C"skip-swig=No" \

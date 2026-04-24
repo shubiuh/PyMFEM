@@ -35,6 +35,7 @@ from build_parmetis import *
 from build_scalapack import *
 from build_mumps import *
 from build_suitesparse import *
+from build_hdf5 import *
 from build_pymfem import *
 from build_libceed import *
 from build_gslib import *
@@ -196,6 +197,11 @@ class BuildPy(_build_py):
             if bglb.build_suitesparse:
                 download('suitesparse')
                 cmake_make_suitesparse()
+            if bglb.build_hdf5:
+                download('hdf5')
+                cmake_make_hdf5(serial=True)
+                if bglb.build_parallel:
+                    cmake_make_hdf5(serial=False)
             if bglb.build_libceed:
                 download('libceed')
                 make_libceed()
@@ -309,7 +315,7 @@ class Clean(_clean):
                 command = ['make', 'clean']
                 subprocess.check_call(command)
         if self.all_exts or self.all:
-            for xxx in ('metis', 'hypre', 'mfem', 'gslib', 'gklib', 'libceed'):
+            for xxx in ('metis', 'hypre', 'mfem', 'gslib', 'gklib', 'libceed', 'hdf5'):
                 path = os.path.join(extdir, xxx)
                 if os.path.exists(path):
                     shutil.rmtree(path)

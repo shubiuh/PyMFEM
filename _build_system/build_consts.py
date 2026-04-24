@@ -148,4 +148,11 @@ REPOS = dict(
                 "7.8.3", None, "https://github.com/DrTimothyAldenDavis/SuiteSparse/archive/refs/tags/v7.8.3.tar.gz"),
         ]
     ),
+    hdf5=dict(
+        url="https://github.com/HDFGroup/hdf5",
+        releases=[
+            release(
+                "1.14.6", None, "https://github.com/HDFGroup/hdf5/archive/refs/tags/hdf5_1.14.6.tar.gz"),
+        ]
+    ),
 )

@@ -75,6 +75,10 @@ enable_suitesparse = False
 build_suitesparse = False
 suitesparse_prefix = "/usr/"
 
+enable_hdf5 = False
+build_hdf5 = False
+hdf5_prefix = ''
+
 enable_lapack = False
 blas_libraries = ""
 lapack_libraries = ""

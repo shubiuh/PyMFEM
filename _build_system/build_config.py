@@ -89,6 +89,7 @@ def print_config():
     print(" build hypre : " + ("Yes" if bglb.build_hypre else "No"))
     print(" build mumps : " + ("Yes" if bglb.build_mumps else "No"))
     print(" build suitesparse : " + ("Yes" if bglb.build_suitesparse else "No"))
+    print(" enable hdf5 : " + ("Yes" if bglb.enable_hdf5 else "No"))
     print(" build libceed : " + ("Yes" if bglb.build_libceed else "No"))
     print(" build gslib : " + ("Yes" if bglb.build_gslib else "No"))
     print(" call SWIG wrapper generator: " +
@@ -107,6 +108,8 @@ def print_config():
         print(" mumps prefix", bglb.mumps_prefix)
     if bglb.enable_suitesparse:
         print(" suitesparse prefix", bglb.suitesparse_prefix)
+    if bglb.enable_hdf5:
+        print(" hdf5 prefix", bglb.hdf5_prefix)
     if bglb.enable_mkl_pardiso:
         print(" mkl pardiso prefix", bglb.mkl_pardiso_prefix)
         print(" mkl library dir", bglb.mkl_library_dir)
@@ -192,6 +195,8 @@ def initialize_cmd_options(command_obj):
 
     command_obj.with_suitesparse = False
     command_obj.suitesparse_prefix = ''
+    command_obj.with_hdf5 = False
+    command_obj.hdf5_prefix = ''
 
     command_obj.with_lapack = False
     command_obj.blas_libraries = ""
@@ -261,6 +266,8 @@ cmd_options = [
 
     ('suitesparse-prefix=', None,
      'Specify locaiton of suitesparse (=SuiteSparse_DIR)'),
+    ('with-hdf5', None, 'build MFEM with hdf5'),
+    ('hdf5-prefix=', None, 'Specify locaiton of hdf5 (=HDF5_DIR)'),
     ('with-libceed', None, 'enable libceed'),
     ('libceed-prefix=', None, 'Specify locaiton of libceed'),
     ('libceed-only', None, 'Build libceed only'),
@@ -401,6 +408,7 @@ def configure_install(self):
     bglb.enable_gslib = bool(self.with_gslib)
     bglb.gslib_only = bool(self.gslib_only)
     bglb.enable_suitesparse = bool(self.with_suitesparse)
+    bglb.enable_hdf5 = bool(self.with_hdf5)
     bglb.enable_lapack = bool(self.with_lapack)
 
     # controlls PyMFEM parallel
@@ -505,6 +513,28 @@ def configure_install(self):
         else:
             bglb.suitesparse_prefix = bglb.mfem_prefix
             bglb.build_suitesparse = True
+
+    if bglb.enable_hdf5:
+        if self.hdf5_prefix != '':
+            user_hdf5_prefix = abspath(self.hdf5_prefix)
+
+            # Accept both a consolidated prefix and per-variant layout.
+            check_serial = find_libpath_from_prefix('hdf5', os.path.join(user_hdf5_prefix, 'serial'))
+            check_parallel = find_libpath_from_prefix('hdf5', os.path.join(user_hdf5_prefix, 'openmpi'))
+            check_single = find_libpath_from_prefix('hdf5', user_hdf5_prefix)
+
+            assert (check_serial != '' or check_parallel != '' or check_single != ''), \
+                "libhdf5.so is not found in the specified hdf5-prefix"
+
+            bglb.hdf5_prefix = user_hdf5_prefix
+            bglb.build_hdf5 = False
+        else:
+            if bglb.ext_prefix == '':
+                bglb.ext_prefix = external_install_prefix(bglb.prefix)
+            bglb.hdf5_prefix = os.path.join(bglb.ext_prefix, 'hdf5')
+            bglb.build_hdf5 = True
+    else:
+        bglb.build_hdf5 = False
 
     if self.pumi_prefix != '':
         bglb.pumi_prefix = abspath(self.pumi_prefix)

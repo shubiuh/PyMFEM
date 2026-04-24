@@ -222,6 +222,23 @@ def cmake_make_mfem(serial=True):
         if bglb.suitesparse_prefix != '':
             cmake_opts['DSuiteSparse_DIR'] = bglb.suitesparse_prefix
 
+    if bglb.enable_hdf5:
+        cmake_opts['DMFEM_USE_HDF5'] = '1'
+        if serial:
+            hdf5_dir = os.path.join(bglb.hdf5_prefix, 'serial')
+        else:
+            hdf5_dir = os.path.join(bglb.hdf5_prefix, 'openmpi')
+        cmake_opts['DHDF5_DIR'] = hdf5_dir
+
+        hdf5lib = find_libpath_from_prefix("hdf5", hdf5_dir)
+        if hdf5lib == '':
+            hdf5lib = find_libpath_from_prefix("hdf5", bglb.hdf5_prefix)
+        if hdf5lib != '':
+            add_rpath(os.path.dirname(hdf5lib), ex_loc)
+    else:
+        cmake_opts['DMFEM_USE_HDF5'] = '0'
+
+
     if bglb.enable_lapack:
         cmake_opts['DMFEM_USE_LAPACK'] = '1'
     if bglb.blas_libraries != "":
