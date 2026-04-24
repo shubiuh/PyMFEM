@@ -83,7 +83,7 @@ dry_run = False
 do_bdist_wheel = False
 bdist_wheel_dir = ''
 
-keep_temp = False
+keep_temp = True
 
 use_unverifed_SSL = False if os.getenv(
     "unverifedSSL") is None else os.getenv("unverifiedSSL")

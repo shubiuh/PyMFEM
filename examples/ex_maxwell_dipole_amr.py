@@ -396,46 +396,57 @@ def get_source_region_size(mesh, fespace, dipole_info):
 def mark_amr_elements(mesh, fespace, source, sigma_by_attr, default_sigma,
                       refine_fraction, forced_elements=None):
     """
-    Mark elements with the strongest source contribution and conductivity
-    contrast for local refinement.
+    Mark local ParMesh elements for refinement based on proximity to source
+    and conductivity contrast.
+
+    The key point is that the refinement fraction is interpreted globally
+    across all MPI ranks. If each rank were to mark its own top fraction,
+    partitions far from the source would still refine some elements, creating
+    partition-aligned refinement artifacts.
     """
     refine_fraction = min(max(refine_fraction, 0.0), 1.0)
-    num_elements = mesh.GetNE()
-    if num_elements == 0 or refine_fraction <= 0.0:
-        forced_elements = forced_elements or []
-        marked = mfem.intArray(len(forced_elements))
-        for i, element_id in enumerate(forced_elements):
-            marked[i] = element_id
-        return marked, []
 
-    target_count = max(1, int(np.ceil(refine_fraction * num_elements)))
+    # In PyMFEM's ParMesh binding, GetNE() is the supported local-element count.
+    num_local_elements = mesh.GetNE()
+    if num_local_elements == 0 or refine_fraction <= 0.0:
+        return mfem.intArray(0), []
     attrs = mesh.GetAttributeArray()
 
     scored_elements = []
-    for element_id in range(num_elements):
+    for element_id in range(num_local_elements):
         center = get_element_center(mesh, element_id)
-        source_score = 1.0 / (source.distance_squared(center) + 1e-12)
+        distance_sq = source.distance_squared(center)
+
+        # Smoother scoring: avoid singularity at source location
+        source_score = 1.0 / (distance_sq + 1.0)
 
         sigma_value = float(default_sigma)
         if len(attrs) > element_id:
             sigma_value = float(sigma_by_attr.get(attrs[element_id], default_sigma))
 
         conductivity_jump = abs(sigma_value - default_sigma)
-        score = source_score * (1.0 + conductivity_jump) + conductivity_jump
+        score = source_score * (1.0 + 10.0 * conductivity_jump) + conductivity_jump
         scored_elements.append((score, element_id))
 
+    local_scores = [score for score, _ in scored_elements if score > 0.0]
+    gathered_scores = MPI.COMM_WORLD.allgather(local_scores)
+    global_scores = [score for rank_scores in gathered_scores for score in rank_scores]
+
+    if not global_scores:
+        return mfem.intArray(0), []
+
+    global_scores.sort(reverse=True)
+    global_target_count = max(1, int(np.ceil(refine_fraction * len(global_scores))))
+    score_threshold = global_scores[min(global_target_count, len(global_scores)) - 1]
+
     scored_elements.sort(reverse=True)
-    selected = [element_id for score, element_id in scored_elements[:target_count]
-                if score > 0.0]
+    selected = [element_id for score, element_id in scored_elements
+                if score >= score_threshold and score > 0.0]
 
     if not selected and scored_elements:
-        selected = [scored_elements[0][1]]
-
-    if forced_elements:
-        selected_set = set(selected)
-        for element_id in forced_elements:
-            selected_set.add(int(element_id))
-        selected = sorted(selected_set)
+        global_best = MPI.COMM_WORLD.allreduce(scored_elements[0][0], op=MPI.MAX)
+        if scored_elements[0][0] == global_best:
+            selected = [scored_elements[0][1]]
 
     marked = mfem.intArray(len(selected))
     for i, element_id in enumerate(selected):
@@ -783,19 +794,15 @@ def run(order=1,
                 sol_sock_imag.send_text("window_title 'AMR Maxwell Dipole (imag)'")
                 sol_sock_imag.flush()
 
-        source_needs_refinement = source_region_size > source_max_size
         if amr_step >= amr_iterations:
             break
 
-        forced_elements = []
-        if source_needs_refinement:
-            forced_elements = [element_id for element_id, element_size in zip(
-                dipole_info.get('local_elements', []), local_source_sizes)
-                if element_size > source_max_size]
-
+        # Rely on standard scoring-based refinement which naturally prioritizes
+        # elements close to the dipole source. Avoid forced refinement which can
+        # cause over-refinement at partition boundaries.
         marked, top_markers = mark_amr_elements(
             pmesh, fespace, J, sigma_by_attr, sigma, refine_fraction,
-            forced_elements=forced_elements)
+            forced_elements=None)
 
         global_marked_count = MPI.COMM_WORLD.allreduce(marked.Size(), op=MPI.SUM)
 
@@ -809,8 +816,6 @@ def run(order=1,
                 f'(score={score:.3e}, elem={element_id})'
                 for score, element_id in top_markers)
             print(f'Refining {marked.Size()} local elements')
-            if source_needs_refinement:
-                print('Forcing refinement near the dipole source until the local size target is met.')
             print(f'Top markers: {preview}')
 
         pmesh.GeneralRefinement(marked)
@@ -818,10 +823,11 @@ def run(order=1,
         fespace.Update()
         E.Update()
 
-        if pmesh.Nonconforming():
-            pmesh.Rebalance()
-            fespace.Update()
-            E.Update()
+        # Always rebalance after refinement to prevent load imbalance at partition corners
+        # (like ex15p does), not just when mesh is nonconforming
+        pmesh.Rebalance()
+        fespace.Update()
+        E.Update()
 
         a.Update()
         pc_op.Update()
