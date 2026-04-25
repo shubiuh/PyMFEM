@@ -58,7 +58,24 @@ python -m pip install . \
   -C"skip-swig=No" \
   --verbose
 
-# PC with GPU, 
+# build with pardiso and suitesparse and GPU and hypre-gpu
+python -m pip install . \
+  -C"with-parallel=Yes" \
+  -C"with-gslib=Yes" \
+  -C"with-mumps=Yes" \
+  -C"with-mkl-pardiso=Yes" \
+  -C"with-mkl-cpardiso=Yes" \
+  -C"with-suitesparse=Yes" \
+  -C"with-hdf5=Yes" \
+  -C"with-cuda=Yes" \
+  -C"with-cuda-hypre=Yes" \
+  -C"cuda-arch=80" \
+  -C"mfem-branch=v48" \
+  -C"skip-ext=No" \
+  -C"skip-swig=No" \
+  --verbose
+
+# Docker PC with GPU, 
 #The forwarding of ports 3000, 8000 and 8080 is needed for VS Code, GLVis and the websocket connection between them. 
 # The --cap-add=SYS_PTRACE option is added to resolve MPI warnings.
 docker run --gpus all --cap-add=SYS_PTRACE \
